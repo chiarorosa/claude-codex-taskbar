@@ -145,6 +145,15 @@ pub fn is_fullscreen(fg: Rect, monitor: Rect, fg_is_shell: bool) -> bool {
         && fg.bottom >= monitor.bottom
 }
 
+/// First Windows 11 build; Windows 10 has no centered taskbar and no `TaskbarAl` value.
+pub const WIN11_FIRST_BUILD: u32 = 22000;
+
+/// Whether the taskbar icons start at the left edge, leaving no free corner for the strip.
+/// `build` is the Windows build number; `taskbar_al` is the `TaskbarAl` registry value.
+pub fn icons_left_aligned(build: Option<u32>, taskbar_al: Option<u32>) -> bool {
+    build.is_some_and(|b| b < WIN11_FIRST_BUILD) || taskbar_al == Some(0)
+}
+
 const ADVANCED_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced";
 
 fn reg_dword(subkey: &str, value: &str) -> Option<u32> {
@@ -281,6 +290,30 @@ mod tests {
             ..info(Some(700))
         };
         assert_eq!(available_width(&i, 8), 0);
+    }
+
+    #[test]
+    fn windows10_is_always_left_aligned() {
+        // Windows 10 never writes TaskbarAl; Start and search sit at the far left.
+        assert!(icons_left_aligned(Some(19045), None));
+        assert!(icons_left_aligned(Some(19045), Some(1)));
+    }
+
+    #[test]
+    fn windows11_follows_taskbar_alignment() {
+        assert!(
+            !icons_left_aligned(Some(22631), None),
+            "centered is the default"
+        );
+        assert!(!icons_left_aligned(Some(22631), Some(1)));
+        assert!(icons_left_aligned(Some(22631), Some(0)));
+        assert!(!icons_left_aligned(Some(WIN11_FIRST_BUILD), None));
+    }
+
+    #[test]
+    fn unknown_build_follows_taskbar_alignment() {
+        assert!(!icons_left_aligned(None, None));
+        assert!(icons_left_aligned(None, Some(0)));
     }
 
     #[test]
