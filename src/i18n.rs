@@ -31,6 +31,7 @@ pub fn fmt(template: &str, value: &str) -> String {
 pub enum Key {
     MenuSettings,
     MenuRefresh,
+    MenuCopyUsage,
     MenuAutostart,
     MenuExit,
     LabelWeek,
@@ -76,6 +77,7 @@ impl Key {
     pub const ALL: &'static [Key] = &[
         Key::MenuSettings,
         Key::MenuRefresh,
+        Key::MenuCopyUsage,
         Key::MenuAutostart,
         Key::MenuExit,
         Key::LabelWeek,
@@ -122,6 +124,7 @@ pub fn t(lang: Lang, key: Key) -> &'static str {
     let (en, pt) = match key {
         Key::MenuSettings => ("Settings", "Configurações"),
         Key::MenuRefresh => ("Refresh now", "Atualizar agora"),
+        Key::MenuCopyUsage => ("Copy usage", "Copiar uso"),
         Key::MenuAutostart => ("Start with Windows", "Iniciar com o Windows"),
         Key::MenuExit => ("Exit", "Sair"),
         Key::LabelWeek => ("wk", "sem"),

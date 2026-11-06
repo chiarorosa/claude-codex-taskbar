@@ -1,5 +1,41 @@
 //! Copies text to the Windows clipboard as `CF_UNICODETEXT`.
 
+use windows::Win32::Foundation::{GlobalFree, HANDLE, HWND};
+use windows::Win32::System::DataExchange::{
+    CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData,
+};
+use windows::Win32::System::Memory::{GMEM_MOVEABLE, GlobalAlloc, GlobalLock, GlobalUnlock};
+use windows::Win32::System::Ole::CF_UNICODETEXT;
+use windows::core::{Error, Result};
+
+/// Replaces the clipboard contents with `text`, owned by `hwnd`.
+pub fn set_text(hwnd: HWND, text: &str) -> Result<()> {
+    let buf = clipboard_utf16(text);
+    // SAFETY: the buffer is sized for `buf`, locked only while copying, and freed by us unless
+    // SetClipboardData succeeds, after which the system owns it.
+    unsafe {
+        let mem = GlobalAlloc(GMEM_MOVEABLE, buf.len() * size_of::<u16>())?;
+        let dst = GlobalLock(mem).cast::<u16>();
+        if dst.is_null() {
+            let err = Error::from_thread();
+            let _ = GlobalFree(Some(mem));
+            return Err(err);
+        }
+        std::ptr::copy_nonoverlapping(buf.as_ptr(), dst, buf.len());
+        let _ = GlobalUnlock(mem);
+        let placed = OpenClipboard(Some(hwnd)).and_then(|()| {
+            let set = EmptyClipboard()
+                .and_then(|()| SetClipboardData(CF_UNICODETEXT.0.into(), Some(HANDLE(mem.0))));
+            let _ = CloseClipboard();
+            set
+        });
+        if placed.is_err() {
+            let _ = GlobalFree(Some(mem));
+        }
+        placed.map(|_| ())
+    }
+}
+
 /// Null-terminated UTF-16 with CRLF line breaks, the layout `CF_UNICODETEXT` expects.
 pub fn clipboard_utf16(text: &str) -> Vec<u16> {
     let mut out = Vec::with_capacity(text.len() + 1);

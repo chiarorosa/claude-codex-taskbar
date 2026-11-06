@@ -44,6 +44,7 @@ const CMD_SETTINGS: usize = 1;
 const CMD_REFRESH: usize = 2;
 const CMD_AUTOSTART: usize = 3;
 const CMD_EXIT: usize = 4;
+const CMD_COPY: usize = 5;
 
 thread_local! {
     static APP: RefCell<Option<App>> = const { RefCell::new(None) };
@@ -129,6 +130,7 @@ fn show_menu(hwnd: HWND) {
         };
         item(CMD_SETTINGS, Key::MenuSettings, false);
         item(CMD_REFRESH, Key::MenuRefresh, false);
+        item(CMD_COPY, Key::MenuCopyUsage, false);
         item(CMD_AUTOSTART, Key::MenuAutostart, autostart);
         let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
         item(CMD_EXIT, Key::MenuExit, false);
@@ -152,6 +154,11 @@ fn show_menu(hwnd: HWND) {
         CMD_SETTINGS => super::settings::open(hwnd),
         CMD_REFRESH => {
             with_app(|app| app.control.wake());
+        }
+        CMD_COPY => {
+            if let Some(text) = with_app(|app| app.tooltip()) {
+                let _ = super::clipboard::set_text(hwnd, &text);
+            }
         }
         CMD_AUTOSTART => {
             let _ = if autostart {
