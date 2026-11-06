@@ -349,6 +349,8 @@ impl App {
                 .is_ok()
             {
                 strip::show(hwnd, self);
+            } else {
+                strip::hide(hwnd, self); // hide if painting failed
             }
         }
         self.layout = Some(l);
