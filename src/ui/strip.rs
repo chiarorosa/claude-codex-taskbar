@@ -13,17 +13,17 @@ use windows::Win32::UI::Controls::{
     TTN_GETDISPINFOW, TTS_ALWAYSTIP, TTS_NOPREFIX, TTTOOLINFOW,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    AppendMenuW, CW_USEDEFAULT, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu,
-    DestroyWindow, DispatchMessageW, EVENT_SYSTEM_FOREGROUND, GetCursorPos, GetMessageW,
-    HWND_TOPMOST, IDC_ARROW, IDYES, KillTimer, LoadCursorW, MB_DEFBUTTON2, MB_ICONQUESTION,
-    MB_SETFOREGROUND, MB_YESNO, MF_CHECKED, MF_SEPARATOR, MF_STRING, MSG, MessageBoxW,
-    PBT_APMRESUMEAUTOMATIC, PostMessageW, PostQuitMessage, RegisterClassExW,
+    AppendMenuW, CS_DBLCLKS, CW_USEDEFAULT, CreatePopupMenu, CreateWindowExW, DefWindowProcW,
+    DestroyMenu, DestroyWindow, DispatchMessageW, EVENT_SYSTEM_FOREGROUND, GetCursorPos,
+    GetMessageW, HWND_TOPMOST, IDC_ARROW, IDYES, KillTimer, LoadCursorW, MB_DEFBUTTON2,
+    MB_ICONQUESTION, MB_SETFOREGROUND, MB_YESNO, MF_CHECKED, MF_SEPARATOR, MF_STRING, MSG,
+    MessageBoxW, PBT_APMRESUMEAUTOMATIC, PostMessageW, PostQuitMessage, RegisterClassExW,
     RegisterWindowMessageW, SW_HIDE, SW_SHOWNOACTIVATE, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
     SendMessageW, SetForegroundWindow, SetTimer, SetWindowPos, ShowWindow, TPM_BOTTOMALIGN,
     TPM_RETURNCMD, TPM_RIGHTBUTTON, TrackPopupMenu, TranslateMessage, WINEVENT_OUTOFCONTEXT,
-    WM_APP, WM_DESTROY, WM_DISPLAYCHANGE, WM_DPICHANGED, WM_NOTIFY, WM_POWERBROADCAST,
-    WM_RBUTTONUP, WM_SETTINGCHANGE, WM_TIMER, WNDCLASSEXW, WS_EX_LAYERED, WS_EX_NOACTIVATE,
-    WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP,
+    WM_APP, WM_DESTROY, WM_DISPLAYCHANGE, WM_DPICHANGED, WM_LBUTTONDBLCLK, WM_NOTIFY,
+    WM_POWERBROADCAST, WM_RBUTTONUP, WM_SETTINGCHANGE, WM_TIMER, WNDCLASSEXW, WS_EX_LAYERED,
+    WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP,
 };
 use windows::core::{PCWSTR, PWSTR, w};
 
@@ -272,6 +272,11 @@ extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM)
             show_menu(hwnd);
             LRESULT(0)
         }
+        WM_LBUTTONDBLCLK => {
+            // Same as Refresh now; a single left click still does nothing.
+            with_app(|app| app.control.wake());
+            LRESULT(0)
+        }
         WM_NOTIFY => {
             // SAFETY: WM_NOTIFY's lparam points to an NMHDR-prefixed struct.
             let hdr = unsafe { &*(lparam.0 as *const windows::Win32::UI::Controls::NMHDR) };
@@ -395,6 +400,8 @@ pub fn run(app: App) -> i32 {
         };
         let class = WNDCLASSEXW {
             cbSize: size_of::<WNDCLASSEXW>() as u32,
+            // Windows sends WM_LBUTTONDBLCLK only to classes with CS_DBLCLKS.
+            style: CS_DBLCLKS,
             lpfnWndProc: Some(wndproc),
             hInstance: instance.into(),
             hCursor: LoadCursorW(None, IDC_ARROW).unwrap_or_default(),
