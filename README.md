@@ -118,6 +118,21 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the toolchain setup.
 - **Keep login active (experimental, off by default), for Claude Code and Codex.** If you opt in (the app asks once on first run; also in **Settings**, one switch per provider), when a token has expired the app runs the CLI's own status command hidden (`claude auth status` or `codex login status`), at most every 15 minutes per provider, so the official CLI renews its own login. It sends no prompt and uses no quota. The tooltip tells you whether the renewal worked. **Feedback wanted:** please open an issue saying whether it renewed your login.
 - **Codex offline?** If the endpoint fails, the strip first asks the installed Codex CLI (`codex app-server --listen stdio://`) for live limits, and if that also fails, falls back to the last limits the Codex CLI wrote to its session logs, dimmed, as long as that window has not reset yet.
 
+### Multiple Claude accounts
+
+Have more than one paid Claude plan (say, personal and work)? Switch between them from the strip, without `/logout` and `/login`:
+
+1. While logged in to the first account in Claude Code, right-click the strip → **Claude account → Save current account**.
+2. In Claude Code, run `/login` with the second account, then **Save current account** again.
+3. From then on, pick an account under **Claude account** to switch. Claude Code picks up the new login on its next request; no restart is needed. If a task is running, the app asks first, because the rest of that task runs on the new account.
+
+Each entry shows the plan and the usage last seen on that account. `⚠ login expires in Nd` warns that a saved login is about to expire; `⚠ needs /login` means it has, so log in with that account and save it again. Remove an account under **Claude account → Remove saved account**.
+
+- **Paid plans only.** Pro, Max, Team and Enterprise logins can be saved. Free logins and active Claude Code trials can't.
+- **Always manual.** The app never switches on its own and never rotates accounts to get around usage limits.
+- **Use only accounts that belong to you.** Sharing logins or reselling access violates Anthropic's terms.
+- **How it is kept safe.** Saved logins are encrypted with Windows DPAPI for your user, in `%APPDATA%\claude-codex-taskbar\accounts\`. A switch holds Claude Code's own lock files, backs up the account being left (so its renewed token is never lost), writes through a temp file, and restores everything if any step fails. Not supported when `CLAUDE_CONFIG_DIR` is set.
+
 ## Privacy
 
 - **No telemetry.** The app does not phone home, collect analytics, or check for updates in the background.
