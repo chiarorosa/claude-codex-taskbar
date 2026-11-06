@@ -343,14 +343,13 @@ impl App {
         } else {
             let pos = (info.rect.left + margin, info.rect.top);
             let size = (l.width, info.rect.height());
-            if self
-                .renderer
-                .paint(hwnd, pos, size, dpi, &self.items, &metrics, &l, self.light)
-                .is_ok()
-            {
-                strip::show(hwnd, self);
-            } else {
-                strip::hide(hwnd, self); // hide if painting failed
+            let painted =
+                self.renderer
+                    .paint(hwnd, pos, size, dpi, &self.items, &metrics, &l, self.light);
+            let action = hides_strip(painted.is_err());
+            match action {
+                StripAction::Show => strip::show(hwnd, self),
+                StripAction::Hide => strip::hide(hwnd, self),
             }
         }
         self.layout = Some(l);
@@ -470,5 +469,34 @@ pub fn run() -> i32 {
     match App::new() {
         Ok(app) => strip::run(app),
         Err(_) => 1,
+    }
+}
+
+#[derive(Debug, PartialEq)]
+enum StripAction {
+    Hide,
+    Show,
+}
+
+fn hides_strip(paint_error: bool) -> StripAction {
+    if paint_error {
+        StripAction::Hide
+    } else {
+        StripAction::Show
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn error_hides_strip() {
+        assert_eq!(hides_strip(true), StripAction::Hide);
+    }
+
+    #[test]
+    fn success_shows_strip() {
+        assert_eq!(hides_strip(false), StripAction::Show);
     }
 }
