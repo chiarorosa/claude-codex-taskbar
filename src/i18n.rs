@@ -27,6 +27,14 @@ pub fn fmt(template: &str, value: &str) -> String {
     template.replacen("{}", value, 1)
 }
 
+/// Fills both `{}` of a template in order; a `{}` inside `first` stays literal.
+pub fn fmt2(template: &str, first: &str, second: &str) -> String {
+    match template.split_once("{}") {
+        Some((head, rest)) => format!("{head}{first}{}", fmt(rest, second)),
+        None => template.into(),
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Key {
     MenuSettings,
@@ -213,6 +221,16 @@ pub fn t(lang: Lang, key: Key) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fmt2_fills_both_placeholders_in_order() {
+        assert_eq!(fmt2("a ({}); b {}", "x", "y"), "a (x); b y");
+    }
+
+    #[test]
+    fn fmt2_keeps_braces_inside_the_first_value() {
+        assert_eq!(fmt2("({}) at {}", "odd {}", "09:41"), "(odd {}) at 09:41");
+    }
 
     #[test]
     fn every_key_has_both_languages() {
