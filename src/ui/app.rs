@@ -14,6 +14,7 @@ use crate::i18n::{Lang, detect_lang};
 use crate::limits::claude::ClaudeProvider;
 use crate::limits::codex::CodexProvider;
 use crate::limits::keepalive::{KeepAlive, Outcome, invitation_kinds, run_login_status};
+use crate::limits::reset::{reset_refresh_delay, status_resets};
 use crate::limits::state::{STALE_SECS, age_status, next_status};
 use crate::limits::worker::{Control, Fetcher, LimitResult, spawn_queued};
 use crate::limits::{Provider, ProviderStatus};
@@ -286,6 +287,16 @@ impl App {
             age_status(&self.claude, now, max_age),
             age_status(&self.codex, now, max_age),
         )
+    }
+
+    /// Seconds until a one-off refresh just after the next known limit reset, if it comes
+    /// before the regular refresh.
+    pub fn reset_refresh_delay(&self) -> Option<u32> {
+        let resets: Vec<i64> = [&self.claude, &self.codex]
+            .into_iter()
+            .flat_map(status_resets)
+            .collect();
+        reset_refresh_delay(&resets, now_unix(), self.cfg.limits_interval_secs)
     }
 
     pub fn set_inbox(&mut self, inbox: Receiver<LimitResult>) {

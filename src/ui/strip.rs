@@ -35,6 +35,8 @@ pub const WM_APP_OPEN_SETTINGS: u32 = WM_APP + 3;
 const TIMER_HW: usize = 1;
 const TIMER_TOPMOST: usize = 2;
 const TIMER_DISKS: usize = 3;
+/// One-shot: refresh limits right after a known reset.
+const TIMER_RESET: usize = 4;
 const TOPMOST_MS: u32 = 2000;
 const DISKS_MS: u32 = 30_000;
 
@@ -168,6 +170,24 @@ fn show_menu(hwnd: HWND) {
     }
 }
 
+/// (Re)arms the one-shot refresh after the next known reset, or cancels it when none is due
+/// before the regular refresh. Re-arming replaces the pending timer, so each reset costs at
+/// most one extra request.
+fn arm_reset_timer(hwnd: HWND) {
+    let delay = with_app(|app| app.reset_refresh_delay()).flatten();
+    // SAFETY: the timer belongs to this window.
+    unsafe {
+        match delay {
+            Some(secs) => {
+                SetTimer(Some(hwnd), TIMER_RESET, secs * 1000, None);
+            }
+            None => {
+                let _ = KillTimer(Some(hwnd), TIMER_RESET);
+            }
+        }
+    }
+}
+
 /// Called by the settings window after the user applies changes.
 pub fn config_applied(hwnd: HWND, cfg: crate::config::Config) {
     let secs = cfg.hw_interval_secs;
@@ -194,6 +214,13 @@ extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM)
                 TIMER_DISKS => {
                     with_app(|app| app.refresh_instances());
                 }
+                TIMER_RESET => {
+                    // SAFETY: the timer belongs to this window.
+                    unsafe {
+                        let _ = KillTimer(Some(hwnd), TIMER_RESET);
+                    }
+                    with_app(|app| app.control.wake());
+                }
                 _ => {}
             }
             render(hwnd);
@@ -201,6 +228,7 @@ extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM)
         }
         WM_APP_LIMITS => {
             with_app(|app| app.drain_limits());
+            arm_reset_timer(hwnd);
             render(hwnd);
             LRESULT(0)
         }
@@ -259,7 +287,7 @@ extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM)
             with_app(|app| app.control.stop());
             // SAFETY: timers belong to this window.
             unsafe {
-                for id in [TIMER_HW, TIMER_TOPMOST, TIMER_DISKS] {
+                for id in [TIMER_HW, TIMER_TOPMOST, TIMER_DISKS, TIMER_RESET] {
                     let _ = KillTimer(Some(hwnd), id);
                 }
                 PostQuitMessage(0);
