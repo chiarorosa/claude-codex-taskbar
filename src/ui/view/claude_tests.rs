@@ -108,7 +108,7 @@ fn model_tooltip_preserves_stale_notice() {
     let tip = claude_tip(Lang::En, &status);
     assert!(tip.contains("Opus wk: 72%"));
     assert!(tip.contains("Sonnet wk: 0%"));
-    assert!(tip.contains("Update failed; last data at"));
+    assert!(tip.contains("Update failed (timeout); last data at"));
 }
 
 #[test]

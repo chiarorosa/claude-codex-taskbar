@@ -2,7 +2,7 @@
 
 use crate::config::Config;
 use crate::hw::HwSnapshot;
-use crate::i18n::{Key, Lang, fmt, t};
+use crate::i18n::{Key, Lang, fmt, fmt2, t};
 use crate::limits::{FetchError, ModelKind, ProviderStatus, ProviderUsage, WindowUsage};
 use crate::model::{ItemId, Kind};
 use crate::timeutil::{format_local_day_hhmm, format_local_hhmm};
@@ -208,13 +208,16 @@ fn provider_block(
                 fmt(t(lang, Key::UpdatedFmt), &format_local_hhmm(*at))
             );
         }
-        ProviderStatus::Stale { usage, at, .. } => {
+        ProviderStatus::Stale { usage, at, err } => {
             usage_lines(out, usage);
-            let _ = write!(
-                out,
-                "\n  {}",
-                fmt(t(lang, Key::StaleFmt), &format_local_hhmm(*at))
-            );
+            let at = format_local_hhmm(*at);
+            let notice = match err {
+                FetchError::Network(msg) | FetchError::BadResponse(msg) if !msg.is_empty() => {
+                    fmt2(t(lang, Key::StaleReasonFmt), msg, &at)
+                }
+                _ => fmt(t(lang, Key::StaleFmt), &at),
+            };
+            let _ = write!(out, "\n  {notice}");
         }
         ProviderStatus::FromSession { usage, at } => {
             usage_lines(out, usage);
@@ -369,6 +372,43 @@ mod tests {
         let codex5 = items.iter().find(|i| i.id == ItemId::CodexFive).unwrap();
         assert_eq!(codex5.value, Some(5.0));
         assert!(codex5.dim);
+    }
+
+    fn stale_tip(lang: Lang, err: FetchError) -> String {
+        let status = ProviderStatus::Stale {
+            usage: usage(5.0, 6.0),
+            at: 1000,
+            err,
+        };
+        tooltip_text(
+            lang,
+            &status,
+            &ProviderStatus::Disabled,
+            &[],
+            false,
+            false,
+            1060,
+        )
+    }
+
+    #[test]
+    fn stale_tooltip_says_why_the_update_failed() {
+        let at = format_local_hhmm(1000);
+        let err = || FetchError::BadResponse("HTTP 429".into());
+        assert!(
+            stale_tip(Lang::En, err())
+                .contains(&format!("Update failed (HTTP 429); last data at {at}"))
+        );
+        assert!(stale_tip(Lang::PtBr, err()).contains(&format!(
+            "Falha ao atualizar (HTTP 429); último dado às {at}"
+        )));
+    }
+
+    #[test]
+    fn stale_tooltip_without_a_reason_keeps_the_plain_notice() {
+        let tip = stale_tip(Lang::En, FetchError::Network(String::new()));
+        assert!(tip.contains("Update failed; last data at"));
+        assert!(!tip.contains("()"));
     }
 
     #[test]

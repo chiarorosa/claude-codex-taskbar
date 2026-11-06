@@ -52,6 +52,7 @@ pub enum Key {
     CodexNoLogin,
     NoSubscription,
     StaleFmt,
+    StaleReasonFmt,
     SessionDataFmt,
     ResetsFmt,
     ResetsInMinutesFmt,
@@ -98,6 +99,7 @@ impl Key {
         Key::CodexNoLogin,
         Key::NoSubscription,
         Key::StaleFmt,
+        Key::StaleReasonFmt,
         Key::SessionDataFmt,
         Key::ResetsFmt,
         Key::ResetsInMinutesFmt,
@@ -159,6 +161,10 @@ pub fn t(lang: Lang, key: Key) -> &'static str {
         Key::StaleFmt => (
             "Update failed; last data at {}",
             "Falha ao atualizar; último dado às {}",
+        ),
+        Key::StaleReasonFmt => (
+            "Update failed ({}); last data at {}",
+            "Falha ao atualizar ({}); último dado às {}",
         ),
         Key::SessionDataFmt => ("Data from {} (last session)", "Dado de {} (última sessão)"),
         Key::ResetsFmt => ("resets at {}", "reseta às {}"),

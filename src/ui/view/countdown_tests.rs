@@ -64,7 +64,11 @@ fn retained_tip_expected(lang: Lang, notice: Key) -> String {
         Lang::En => ("wk", "in 1h 12m", "in 7d"),
         Lang::PtBr => ("sem", "em 1h 12min", "em 7d"),
     };
-    let notice = fmt(t(lang, notice), &at);
+    let notice = if notice == Key::StaleReasonFmt {
+        fmt2(t(lang, notice), "offline", &at)
+    } else {
+        fmt(t(lang, notice), &at)
+    };
     let block = format!(
         "\n  5h: 0% · {five} ({five_countdown})\n  {label}: 100% · {week} ({week_countdown})\n  {notice}"
     );
@@ -206,9 +210,9 @@ fn retained_statuses_keep_notices_and_known_future_reset_countdowns() {
                 at: NOW - 60,
                 err: FetchError::Network("offline".into()),
             },
-            "Update failed; last data at",
-            "Falha ao atualizar; último dado às",
-            Key::StaleFmt,
+            "Update failed (offline); last data at",
+            "Falha ao atualizar (offline); último dado às",
+            Key::StaleReasonFmt,
         ),
         (
             ProviderStatus::FromSession {
