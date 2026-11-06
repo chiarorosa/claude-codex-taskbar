@@ -110,7 +110,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the toolchain setup.
 
 ## Usage
 
-- **Free the left corner.** The strip lives where the Windows Widgets (weather) button sits. Turn that button off in *Settings → Personalization → Taskbar → Widgets*. Keep the taskbar icons **centered** (*Taskbar behaviors → Taskbar alignment*); with left-aligned icons there is no room and the strip stays hidden.
+- **Free the left corner.** The strip lives where the Windows Widgets (weather) button sits. Turn that button off in *Settings → Personalization → Taskbar → Widgets*. Keep the taskbar icons **centered** (*Taskbar behaviors → Taskbar alignment*); with left-aligned icons there is no room and the strip stays hidden (the same happens on Windows 10, see the FAQ). Launching the exe again opens **Settings** while the strip is hidden.
 - **Not enough room?** The strip first drops the labels (compact mode), then hides items from the end and shows `…`. Hover to see what was cut, or turn items off in **Settings**.
 - **Toggle providers and items** in **Settings** (right-click → Settings). On first run, Claude and Codex are enabled automatically if their CLI login is found.
 - **Claude shows `—` after a few hours?** Claude Code's login token lasts about 8 hours and is renewed only by Claude Code itself. The app never refreshes it (so it can never log the CLI out); open Claude Code and the numbers come back on the next refresh.
@@ -144,7 +144,7 @@ Same app: with the Codex CLI logged in (`codex login`), the strip shows the 5-ho
 No. It reads the login that the official `claude` and `codex` CLIs already saved on your PC, read-only, and talks only to the providers' own endpoints.
 
 ### Does it work on Windows 10?
-Yes. It runs on Windows 11 and Windows 10 (x64).
+It runs on Windows 10 (x64), but the strip stays hidden there for now. Windows 10 keeps the Start button and the search box in the taskbar's left corner, so there is no free spot for the strip without covering them. Placing it next to the system tray is tracked in [#10](https://github.com/chiarorosa/claude-codex-taskbar/issues/10). Launching `claude-codex-taskbar.exe` again opens **Settings** in the running instance.
 
 ### Does it work on macOS or Linux?
 No. It targets the Windows taskbar. On macOS, menu-bar apps cover the same need (see below).
