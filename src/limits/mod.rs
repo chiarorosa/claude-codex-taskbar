@@ -7,6 +7,7 @@ pub mod keepalive;
 pub mod notify;
 pub mod reset;
 pub mod state;
+pub mod switcher;
 pub mod terminal;
 pub mod worker;
 
