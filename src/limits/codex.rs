@@ -1,15 +1,34 @@
 //! Codex subscription limits, read with the CLI's existing ChatGPT login.
 //!
-//! `auth.json` is only ever read. When the endpoint fails, the newest `rate_limits`
-//! event the CLI wrote to its session logs is used instead, as long as it has not reset.
+//! `auth.json` is only ever read. When the HTTP endpoint fails, the installed `codex` CLI's
+//! JSON-RPC `app-server` (`account/rateLimits/read`) is queried over stdio; if that also fails,
+//! the newest `rate_limits` event the CLI wrote to its session logs is used if it has not reset.
 
 use super::http::get_json;
+use super::keepalive::{CREATE_NO_WINDOW, candidate_dirs, resolve_cli, system_dir};
 use super::{FetchError, Provider, ProviderUsage, WindowUsage};
+use crate::model::Kind;
 use crate::timeutil::{now_unix, parse_rfc3339};
 use serde_json::Value;
+use std::io::{BufRead, BufReader, Write};
+use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+use std::sync::mpsc;
+use std::time::Duration;
 
 const USAGE_URL: &str = "https://chatgpt.com/backend-api/wham/usage";
+const APP_SERVER_TIMEOUT: Duration = Duration::from_secs(5);
+const APP_SERVER_REQUEST: &str = concat!(
+    r#"{"method":"initialize","id":1,"params":{"clientInfo":{"name":"claude-codex-taskbar","title":"CCT","version":""#,
+    env!("CARGO_PKG_VERSION"),
+    r#""}}}"#,
+    "\n",
+    r#"{"method":"initialized","params":{}}"#,
+    "\n",
+    r#"{"method":"account/rateLimits/read","id":3,"params":{}}"#,
+    "\n",
+);
 
 pub struct CodexCreds {
     pub access_token: String,
@@ -99,6 +118,95 @@ pub fn parse_codex_usage(v: &Value, now: i64) -> Result<ProviderUsage, FetchErro
         );
     }
     Ok(usage)
+}
+
+/// Parses the JSON-RPC `account/rateLimits/read` response from `codex app-server`.
+pub fn parse_app_server_rate_limits(v: &Value) -> Result<ProviderUsage, FetchError> {
+    if v.get("error").is_some_and(|e| !e.is_null()) {
+        return Err(FetchError::BadResponse("app-server error response".into()));
+    }
+    let result = v.get("result").unwrap_or(v);
+    let rl = result
+        .get("rateLimits")
+        .or_else(|| result["rateLimitsByLimitId"].get("codex"))
+        .filter(|r| r.is_object())
+        .ok_or_else(|| FetchError::BadResponse("unexpected app-server format".into()))?;
+    let parse = |w: &Value| window(w["usedPercent"].as_f64(), w["resetsAt"].as_i64());
+    let mut usage = ProviderUsage {
+        five_hour: None,
+        weekly: None,
+        ..Default::default()
+    };
+    for (name, secondary) in [("primary", false), ("secondary", true)] {
+        let w = &rl[name];
+        let seconds = w["windowDurationMins"]
+            .as_i64()
+            .map(|m| m.saturating_mul(60));
+        assign_window(&mut usage, parse(w), seconds, secondary);
+    }
+    Ok(usage)
+}
+
+/// Runs `codex app-server --listen stdio://` from `cwd`, sends `account/rateLimits/read`,
+/// waits up to `timeout` for response `id: 3`, and always kills and reaps the child.
+pub fn run_app_server_rate_limits(
+    cli: &Path,
+    cwd: &Path,
+    codex_home: &Path,
+    timeout: Duration,
+) -> Result<ProviderUsage, FetchError> {
+    let mut child = Command::new(cli)
+        .args(["app-server", "--listen", "stdio://"])
+        .current_dir(cwd)
+        .env("CODEX_HOME", codex_home)
+        .creation_flags(CREATE_NO_WINDOW)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|_| FetchError::Network("app-server spawn failed".into()))?;
+
+    let mut stdin = child.stdin.take();
+    let Some(stdout) = child.stdout.take() else {
+        drop(stdin);
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(FetchError::Network("app-server stdout unavailable".into()));
+    };
+
+    if let Some(s) = stdin.as_mut()
+        && (s.write_all(APP_SERVER_REQUEST.as_bytes()).is_err() || s.flush().is_err())
+    {
+        drop(stdin);
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(FetchError::Network("app-server write failed".into()));
+    }
+
+    let (tx, rx) = mpsc::channel();
+    std::thread::spawn(move || {
+        let reader = BufReader::new(stdout);
+        for line in reader.lines().map_while(Result::ok) {
+            if let Ok(v) = serde_json::from_str::<Value>(&line)
+                && v["id"].as_i64() == Some(3)
+            {
+                let _ = tx.send(parse_app_server_rate_limits(&v));
+                return;
+            }
+        }
+        let _ = tx.send(Err(FetchError::BadResponse(
+            "app-server closed without rateLimits response".into(),
+        )));
+    });
+
+    let result = match rx.recv_timeout(timeout) {
+        Ok(res) => res,
+        Err(_) => Err(FetchError::Network("app-server timed out".into())),
+    };
+    drop(stdin);
+    let _ = child.kill();
+    let _ = child.wait();
+    result
 }
 
 /// Parses one session-log line; `None` unless it carries `payload.rate_limits`.
@@ -198,17 +306,38 @@ impl CodexProvider {
         parse_codex_auth(&text)
     }
 
-    /// Falls back to session logs only for transient failures, never for auth problems.
+    /// Falls back to `codex app-server` and then session logs only for transient failures,
+    /// never for auth problems.
     pub fn fetch_with_fallback(&self, now: i64) -> Result<CodexFetch, FetchError> {
-        match self.fetch_at(now) {
+        self.fetch_with_tiers(now, |now| self.fetch_at(now), || self.fetch_app_server())
+    }
+
+    fn fetch_with_tiers(
+        &self,
+        now: i64,
+        http: impl FnOnce(i64) -> Result<ProviderUsage, FetchError>,
+        app_server: impl FnOnce() -> Result<ProviderUsage, FetchError>,
+    ) -> Result<CodexFetch, FetchError> {
+        match http(now) {
             Ok(usage) => Ok((usage, false, now)),
             Err(err @ (FetchError::Network(_) | FetchError::BadResponse(_))) => {
+                if let Ok(usage) = app_server() {
+                    return Ok((usage, false, now));
+                }
                 latest_session_limits(&self.home.join("sessions"), now)
                     .map(|(usage, at)| (usage, true, at))
                     .ok_or(err)
             }
             Err(err) => Err(err),
         }
+    }
+
+    fn fetch_app_server(&self) -> Result<ProviderUsage, FetchError> {
+        let dirs = candidate_dirs(Kind::Codex, |k| std::env::var_os(k));
+        let cli = resolve_cli("codex", &dirs, Path::is_file)
+            .ok_or_else(|| FetchError::Network("codex CLI not found".into()))?;
+        let cwd = system_dir().ok_or_else(|| FetchError::Network("system32 not found".into()))?;
+        run_app_server_rate_limits(&cli, &cwd, &self.home, APP_SERVER_TIMEOUT)
     }
 
     fn fetch_at(&self, now: i64) -> Result<ProviderUsage, FetchError> {
@@ -242,6 +371,7 @@ mod tests {
 
     const AUTH: &str = include_str!("../../tests/fixtures/codex_auth.json");
     const USAGE: &str = include_str!("../../tests/fixtures/codex_usage.json");
+    const APP_SERVER: &str = include_str!("../../tests/fixtures/codex_app_server.json");
     const SESSION: &str = include_str!("../../tests/fixtures/codex_session.jsonl");
 
     fn sessions_dir(name: &str, content: &str) -> PathBuf {
@@ -467,12 +597,242 @@ mod tests {
     }
 
     #[test]
+    fn app_server_fixture_parses() {
+        let v: serde_json::Value = serde_json::from_str(APP_SERVER).unwrap();
+        let u = parse_app_server_rate_limits(&v).unwrap();
+        assert_eq!(
+            u.five_hour,
+            Some(WindowUsage {
+                used_pct: 12.0,
+                resets_at: Some(1793385254)
+            })
+        );
+        assert_eq!(
+            u.weekly,
+            Some(WindowUsage {
+                used_pct: 40.0,
+                resets_at: Some(1793972054)
+            })
+        );
+    }
+
+    #[test]
+    fn app_server_reversed_positions_follow_duration() {
+        let v = json!({
+            "id": 3,
+            "result": {
+                "rateLimits": {
+                    "primary": {
+                        "usedPercent": 55,
+                        "windowDurationMins": 10080,
+                        "resetsAt": 1793622431
+                    },
+                    "secondary": {
+                        "usedPercent": 12,
+                        "windowDurationMins": 300,
+                        "resetsAt": 1793035631
+                    }
+                }
+            }
+        });
+        let u = parse_app_server_rate_limits(&v).unwrap();
+        assert_eq!(u.five_hour.unwrap().used_pct, 12.0);
+        assert_eq!(u.weekly.unwrap().used_pct, 55.0);
+    }
+
+    #[test]
+    fn app_server_missing_window_and_primary_weekly() {
+        let v = json!({
+            "id": 3,
+            "result": {
+                "rateLimits": {
+                    "primary": {
+                        "usedPercent": 55,
+                        "windowDurationMins": 10080,
+                        "resetsAt": 1794267982i64
+                    },
+                    "secondary": null
+                }
+            }
+        });
+        let u = parse_app_server_rate_limits(&v).unwrap();
+        assert_eq!(u.five_hour, None);
+        assert_eq!(
+            u.weekly,
+            Some(WindowUsage {
+                used_pct: 55.0,
+                resets_at: Some(1794267982)
+            })
+        );
+    }
+
+    #[test]
+    fn app_server_unknown_duration_is_not_mislabeled() {
+        let v = json!({
+            "id": 3,
+            "result": {
+                "rateLimits": {
+                    "primary": {
+                        "usedPercent": 55,
+                        "windowDurationMins": 60,
+                        "resetsAt": 1794267982i64
+                    },
+                    "secondary": null
+                }
+            }
+        });
+        let u = parse_app_server_rate_limits(&v).unwrap();
+        assert_eq!(u.five_hour, None);
+        assert_eq!(u.weekly, None);
+    }
+
+    #[test]
+    fn app_server_error_and_missing_payload_are_bad_response() {
+        let err = json!({"id": 3, "error": {"code": -32601, "message": "Method not found"}});
+        assert!(matches!(
+            parse_app_server_rate_limits(&err),
+            Err(FetchError::BadResponse(_))
+        ));
+        let empty = json!({"id": 3, "result": {}});
+        assert!(matches!(
+            parse_app_server_rate_limits(&empty),
+            Err(FetchError::BadResponse(_))
+        ));
+    }
+
+    #[test]
+    fn app_server_runner_reads_id_3_after_notifications() {
+        let base = std::env::temp_dir().join(format!("wuw-codex-app-ok-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        let shim = base.join("codex.cmd");
+        let script = concat!(
+            "@echo off\r\n",
+            "> \"%~dp0args.txt\" echo cwd=%CD%;args=%*\r\n",
+            "echo {\"id\":1,\"result\":{\"userAgent\":\"test\"}}\r\n",
+            "echo {\"method\":\"remoteControl/status/changed\",\"params\":{}}\r\n",
+            "echo {\"id\":3,\"result\":{\"rateLimits\":{\"primary\":{\"usedPercent\":25,\"windowDurationMins\":300,\"resetsAt\":1793385254},\"secondary\":{\"usedPercent\":60,\"windowDurationMins\":10080,\"resetsAt\":1793972054}}}}\r\n",
+        );
+        std::fs::write(&shim, script).unwrap();
+        let cwd = system_dir().unwrap();
+
+        let u = run_app_server_rate_limits(&shim, &cwd, &base, Duration::from_secs(3)).unwrap();
+        let args_out = std::fs::read_to_string(base.join("args.txt")).unwrap();
+        let _ = std::fs::remove_dir_all(&base);
+
+        assert_eq!(u.five_hour.unwrap().used_pct, 25.0);
+        assert_eq!(u.weekly.unwrap().used_pct, 60.0);
+        assert_eq!(
+            args_out.trim().to_lowercase(),
+            format!("cwd={};args=app-server --listen stdio://", cwd.display()).to_lowercase()
+        );
+    }
+
+    #[test]
+    fn app_server_runner_times_out_and_kills_hung_child() {
+        let base = std::env::temp_dir().join(format!("wuw-codex-app-hang-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        let shim = base.join("codex.cmd");
+        std::fs::write(&shim, "@echo off\r\n:hang\r\nset /p x=\r\ngoto hang\r\n").unwrap();
+        let cwd = system_dir().unwrap();
+
+        let res = run_app_server_rate_limits(&shim, &cwd, &base, Duration::from_millis(150));
+        let _ = std::fs::remove_dir_all(&base);
+
+        assert!(matches!(res, Err(FetchError::Network(_))));
+    }
+
+    #[test]
+    fn fallback_chain_prefers_http_then_app_server_then_session_logs() {
+        let dir = sessions_dir("tiers", SESSION);
+        let home = dir.parent().unwrap().to_path_buf();
+        let provider = CodexProvider { home };
+        let now = 1793000000;
+
+        let sample = |pct: f32| ProviderUsage {
+            five_hour: Some(WindowUsage {
+                used_pct: pct,
+                resets_at: Some(1793385254),
+            }),
+            weekly: None,
+            ..Default::default()
+        };
+
+        // 1. HTTP succeeds -> app-server is not invoked.
+        let mut app_called = false;
+        let (u, from_session, at) = provider
+            .fetch_with_tiers(
+                now,
+                |_| Ok(sample(10.0)),
+                || {
+                    app_called = true;
+                    Ok(sample(20.0))
+                },
+            )
+            .unwrap();
+        assert!(!app_called);
+        assert!(!from_session);
+        assert_eq!(at, now);
+        assert_eq!(u.five_hour.unwrap().used_pct, 10.0);
+
+        // 2. HTTP fails transiently, app-server succeeds -> live reading (from_session = false).
+        let (u, from_session, at) = provider
+            .fetch_with_tiers(
+                now,
+                |_| Err(FetchError::Network("http down".into())),
+                || Ok(sample(20.0)),
+            )
+            .unwrap();
+        assert!(!from_session);
+        assert_eq!(at, now);
+        assert_eq!(u.five_hour.unwrap().used_pct, 20.0);
+
+        // 3. HTTP and app-server both fail -> falls back to session logs (from_session = true).
+        let (u, from_session, at) = provider
+            .fetch_with_tiers(
+                now,
+                |_| Err(FetchError::BadResponse("bad http".into())),
+                || Err(FetchError::Network("app-server failed".into())),
+            )
+            .unwrap();
+        assert!(from_session);
+        assert_eq!(at, parse_rfc3339("2026-10-26T15:56:19Z").unwrap());
+        assert_eq!(u.five_hour.unwrap().used_pct, 44.0);
+
+        // 4. Auth errors never fall back to app-server or session logs.
+        let mut app_called = false;
+        let err = provider
+            .fetch_with_tiers(
+                now,
+                |_| Err(FetchError::Expired),
+                || {
+                    app_called = true;
+                    Ok(sample(20.0))
+                },
+            )
+            .unwrap_err();
+        assert!(!app_called);
+        assert_eq!(err, FetchError::Expired);
+    }
+
+    #[test]
     #[ignore = "calls the real endpoint with the local login"]
     fn live_codex() {
         let p = CodexProvider {
             home: CodexProvider::default_home(),
         };
         let u = crate::limits::Provider::fetch(&p).expect("live fetch");
+        assert!(u.five_hour.is_some() || u.weekly.is_some());
+    }
+
+    #[test]
+    #[ignore = "runs the locally installed Codex CLI app-server"]
+    fn live_codex_app_server() {
+        let p = CodexProvider {
+            home: CodexProvider::default_home(),
+        };
+        let u = p.fetch_app_server().expect("live app-server fetch");
         assert!(u.five_hour.is_some() || u.weekly.is_some());
     }
 }
