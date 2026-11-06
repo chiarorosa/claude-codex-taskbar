@@ -18,6 +18,8 @@ use std::path::{Path, PathBuf};
 pub const PAID_PLANS: [&str; 4] = ["pro", "max", "team", "enterprise"];
 /// A login expiring within this many seconds is flagged.
 pub const EXPIRY_WARNING_SECS: i64 = 7 * 24 * 3600;
+/// Safety copies of displaced, unsaved logins kept in `stash\`.
+pub const STASH_KEEP: usize = 10;
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -328,8 +330,36 @@ impl Store {
         fsio::atomic_write(&self.file(id, "oauth.json"), json.as_bytes())
     }
 
-    fn index_path(&self) -> PathBuf {
+    pub(crate) fn index_path(&self) -> PathBuf {
         self.dir.join("accounts.json")
+    }
+
+    pub(crate) fn index_bytes(accounts: &Accounts) -> io::Result<Vec<u8>> {
+        serde_json::to_vec_pretty(accounts).map_err(io::Error::other)
+    }
+
+    /// Keeps an encrypted safety copy of a live login that belongs to no slot, before it is
+    /// overwritten. Only the newest [`STASH_KEEP`] copies are kept.
+    pub fn stash(&self, creds: &Secret, now: i64) -> io::Result<PathBuf> {
+        let dir = self.dir.join("stash");
+        std::fs::create_dir_all(&dir)?;
+        let mut path = dir.join(format!("{now}.cred"));
+        let mut n = 1;
+        while path.exists() {
+            path = dir.join(format!("{now}-{n}.cred"));
+            n += 1;
+        }
+        fsio::atomic_write(&path, &vault::protect(creds.expose().as_bytes())?)?;
+        let mut copies: Vec<_> = std::fs::read_dir(&dir)?
+            .flatten()
+            .filter_map(|e| Some((e.metadata().ok()?.modified().ok()?, e.path())))
+            .collect();
+        copies.sort();
+        let excess = copies.len().saturating_sub(STASH_KEEP);
+        for (_, old) in copies.into_iter().take(excess) {
+            let _ = std::fs::remove_file(old);
+        }
+        Ok(path)
     }
 
     fn file(&self, id: u32, ext: &str) -> PathBuf {

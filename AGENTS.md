@@ -37,6 +37,11 @@ and run `claude-codex-taskbar.exe`.
 - Pure logic lives in testable functions; write the failing test first.
 - Credentials are read-only: never write `~/.claude/.credentials.json` or `~/.codex/auth.json`,
   never refresh tokens in-app, never log or print tokens (`Debug` impls redact them).
+  The one exception is `src/limits/switcher/` (#53): it may write `~/.claude/.credentials.json`
+  and the `oauthAccount` key of `~/.claude.json` only on an explicit user action (Save current
+  account / Switch), always under Claude Code's own locks, atomically, after backing up the
+  outgoing credential. Saved accounts live DPAPI-encrypted in CCT's own folder. Tokens are still
+  never refreshed in-app; `~/.codex/auth.json` stays read-only.
 - Network access only to the providers' own usage endpoints. No telemetry.
 - Never show `0%` for an error; error states render `—`.
 - All user-facing text goes through `i18n::t` with both English and pt-BR strings.

@@ -122,7 +122,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the toolchain setup.
 
 - **No telemetry.** The app does not phone home, collect analytics, or check for updates in the background.
 - **Network access is limited** to the providers' own usage endpoints, and only for the providers you enable.
-- **Credentials are read-only.** The app reads `~/.claude/.credentials.json` and `~/.codex/auth.json` (respecting `CODEX_HOME`) but never writes to them, never refreshes tokens, and never competes with the official CLIs.
+- **Credentials are read-only.** The app reads `~/.claude/.credentials.json` and `~/.codex/auth.json` (respecting `CODEX_HOME`) but never writes to them, never refreshes tokens, and never competes with the official CLIs. The one exception is switching Claude accounts: only when you click *Switch*, the app writes the Claude login, under Claude Code's own locks and with a backup.
 - **Credentials are never logged, copied, or sent anywhere** except to the corresponding provider's own endpoint.
 - **No other programs are run**, except when the Codex HTTP endpoint fails (it queries the local `codex app-server` over stdio, hidden) or when you turn on *Keep login active*, which runs only `claude auth status` and/or `codex login status` (hidden, output discarded).
 - Settings are stored locally in `%APPDATA%`.

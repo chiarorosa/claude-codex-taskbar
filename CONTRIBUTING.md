@@ -54,7 +54,7 @@ Guidelines:
 - **Keep it light.** This app's main promise is a tiny binary and near-zero idle CPU. Justify any new dependency in the PR description, and prefer the standard library or the `windows` crate.
 - **Test what can be tested.** Parsers for credentials files and endpoint responses must have unit tests with fixtures. Fixtures must never contain real tokens; use obviously fake values.
 - **Never log credentials.** Do not print, log, or include tokens, account IDs, or raw credential file contents in errors, panics, debug output, or tests. See [SECURITY.md](SECURITY.md) for the full rules.
-- **Credentials stay read-only.** Never write to `~/.claude` or `~/.codex`, and never refresh tokens.
+- **Credentials stay read-only.** Never write to `~/.claude` or `~/.codex`, and never refresh tokens. The only exception is the Claude account switcher in `src/limits/switcher/` (see AGENTS.md and #53).
 - **No telemetry.** Network access is limited to the providers' own usage endpoints.
 - **Show errors honestly.** Never display `0%` or stale data as if it were current when a fetch fails.
 
