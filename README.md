@@ -41,7 +41,8 @@ Know, without interrupting your work, whether your PC is under load and how much
 - **Toggles**: every item and every provider can be turned on or off independently. Disabled items disappear and the strip shrinks. Hidden disks are remembered by their drive letters, so changing disk numbers does not lose the setting; disks without letters use their disk number. Existing hidden-disk settings remain compatible.
 - **Color cues**: progress bars turn yellow near the limit and red when close to it.
 - **Hover** for a tooltip with reset times and a countdown to known future resets, last update time, and error details. The countdown follows the absolute time, e.g. `resets at 14:20 (in 1h 12m)`, using minutes, hours/minutes or days/hours and omitting a zero second unit (`1h`, `7d`).
-- **Right-click** for a menu: **Settings**, **Refresh now**, **Start with Windows**, **Exit**.
+- **Double-click** the strip to refresh the limits right away (same as **Refresh now**).
+- **Right-click** for a menu: **Settings**, **Refresh now**, **Copy usage** (copies the tooltip text, handy for bug reports), **Start with Windows**, **Exit**.
 - **Plays nice with the taskbar** (see below).
 
 ### Stays out of your way
