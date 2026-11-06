@@ -1,11 +1,13 @@
 //! Taskbar geometry and environment: where the free left corner is and when to hide.
 
+use windows::Wdk::System::SystemServices::RtlGetVersion;
 use windows::Win32::Foundation::{HWND, RECT};
 use windows::Win32::Graphics::Gdi::{
     GetMonitorInfoW, MONITOR_DEFAULTTOPRIMARY, MONITORINFO, MonitorFromWindow,
 };
 use windows::Win32::System::Com::{CLSCTX_INPROC_SERVER, CoCreateInstance};
 use windows::Win32::System::Registry::{HKEY_CURRENT_USER, RRF_RT_REG_DWORD, RegGetValueW};
+use windows::Win32::System::SystemInformation::OSVERSIONINFOW;
 use windows::Win32::System::Variant::VARIANT;
 use windows::Win32::UI::Accessibility::{
     CUIAutomation, IUIAutomation, TreeScope_Descendants, UIA_AutomationIdPropertyId,
@@ -174,6 +176,18 @@ fn reg_dword(subkey: &str, value: &str) -> Option<u32> {
     status.is_ok().then_some(data)
 }
 
+/// Windows build number. `RtlGetVersion` reports the real build regardless of the app
+/// manifest (`GetVersionExW` reports Windows 8's 9200 without one, e.g. in test binaries).
+fn windows_build() -> Option<u32> {
+    let mut info = OSVERSIONINFOW {
+        dwOSVersionInfoSize: size_of::<OSVERSIONINFOW>() as u32,
+        ..Default::default()
+    };
+    // SAFETY: the size field is set and info is a valid out pointer.
+    unsafe { RtlGetVersion(&mut info) }.ok().ok()?;
+    Some(info.dwBuildNumber)
+}
+
 fn start_button_left(taskbar: HWND) -> Option<i32> {
     // SAFETY: COM is initialized on the UI thread by main; all calls are on that thread.
     unsafe {
@@ -227,7 +241,7 @@ pub fn query(with_icons: bool) -> Option<TaskbarInfo> {
         dpi: unsafe { GetDpiForWindow(hwnd) }.max(96),
         autohide: state & ABS_AUTOHIDE != 0,
         visible: overlap > 4,
-        left_aligned: reg_dword(ADVANCED_KEY, "TaskbarAl") == Some(0),
+        left_aligned: icons_left_aligned(windows_build(), reg_dword(ADVANCED_KEY, "TaskbarAl")),
         widgets_button_on: reg_dword(ADVANCED_KEY, "TaskbarDa").is_none_or(|v| v == 1),
         icons_left: if with_icons {
             start_button_left(hwnd)
