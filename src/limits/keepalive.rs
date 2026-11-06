@@ -2,16 +2,20 @@
 //! status command (`claude auth status`, `codex login status`; neither sends a prompt) so
 //! the CLI itself renews its own login. This app still never writes credentials files.
 
+use super::terminal::run_in_terminal;
 use super::{FetchError, ProviderStatus};
 use crate::model::Kind;
 use std::ffi::OsString;
 use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
 use windows::Win32::System::SystemInformation::GetSystemDirectoryW;
 
 /// Minimum spacing between CLI runs.
 pub const MIN_INTERVAL_SECS: i64 = 15 * 60;
+/// Hard limit for one status command run; the CLI is killed after it.
+const RUN_TIMEOUT_MS: u32 = 60_000;
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -139,6 +143,43 @@ fn login_command(cli: &Path, args: &[&str], cwd: &Path) -> Command {
     command
 }
 
+/// Whether the CLI must run with a terminal as stdout. Claude Code treats a redirected stdout
+/// as non-interactive (`!process.stdout.isTTY`), and then `claude auth status` exits without
+/// renewing an expired login (#52). Codex renews without one.
+pub fn needs_terminal(kind: Kind) -> bool {
+    matches!(kind, Kind::Claude)
+}
+
+/// The application and full command line for `CreateProcessW`, for an already resolved CLI.
+///
+/// Mirrors what the standard library does for `Command`: an `.exe` runs directly; a `.cmd` shim
+/// runs as `<system>\cmd.exe /e:ON /v:OFF /d /c ""<script>" <args>"`, so `cmd.exe` comes from
+/// System32 and registry `AutoRun` is skipped. Anything that cannot be quoted safely is refused:
+/// a `"` in the path, a `%` in a `.cmd` path (cmd expands it even inside quotes), a relative
+/// path, another extension, or an argument that is not plain `[A-Za-z0-9-]`.
+fn process_command_line(cli: &Path, args: &[&str], sys: &Path) -> Option<(PathBuf, String)> {
+    let plain =
+        |a: &&str| !a.is_empty() && a.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-');
+    let path = cli.to_str()?;
+    if !cli.is_absolute() || path.contains('"') || !args.iter().all(plain) {
+        return None;
+    }
+    let tail: String = args.iter().map(|a| format!(" {a}")).collect();
+    let ext = cli.extension()?.to_str()?.to_ascii_lowercase();
+    match ext.as_str() {
+        "exe" => Some((cli.to_path_buf(), format!("\"{path}\"{tail}"))),
+        "cmd" if !path.contains('%') => {
+            let cmd = sys.join("cmd.exe");
+            let line = format!(
+                "\"{}\" /e:ON /v:OFF /d /c \"\"{path}\"{tail}\"",
+                cmd.display()
+            );
+            Some((cmd, line))
+        }
+        _ => None,
+    }
+}
+
 /// `C:\Windows\System32`: not writable by the user, so a safe working directory.
 fn system_dir() -> Option<PathBuf> {
     let mut buf = [0u16; 260];
@@ -147,9 +188,13 @@ fn system_dir() -> Option<PathBuf> {
     (len > 0 && len < buf.len()).then(|| PathBuf::from(String::from_utf16_lossy(&buf[..len])))
 }
 
-/// Runs the provider's status command hidden and waits for it. The CLI is resolved to an
-/// absolute path first; if it cannot be found, keep-alive is skipped. Output is discarded (it
-/// contains account details).
+/// Runs the provider's status command hidden and waits for it, at most [`RUN_TIMEOUT_MS`];
+/// an overrunning CLI is killed and reaped. The CLI is resolved to an absolute path first; if
+/// it cannot be found, keep-alive is skipped. Output is discarded (it contains account details).
+///
+/// Claude runs attached to a headless pseudo console (see [`needs_terminal`]); the working
+/// directory stays System32, which is not user-writable (a `.cmd` shim's `cmd.exe` searches the
+/// current directory for the `node` it starts).
 pub fn run_login_status(kind: Kind) -> bool {
     let Some((name, args)) = status_command(kind).and_then(|c| c.split_first()) else {
         return false;
@@ -158,13 +203,37 @@ pub fn run_login_status(kind: Kind) -> bool {
     let (Some(cli), Some(cwd)) = (resolve_cli(name, &dirs, Path::is_file), system_dir()) else {
         return false;
     };
-    login_command(&cli, args, &cwd)
+    if needs_terminal(kind) {
+        return process_command_line(&cli, args, &cwd)
+            .and_then(|(app, line)| run_in_terminal(&app, &line, &cwd, RUN_TIMEOUT_MS))
+            == Some(0);
+    }
+    let mut command = login_command(&cli, args, &cwd);
+    command
         .creation_flags(CREATE_NO_WINDOW)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .is_ok_and(|s| s.success())
+        .stderr(Stdio::null());
+    run_with_timeout(command, Duration::from_millis(RUN_TIMEOUT_MS.into()))
+}
+
+/// Spawns `command` and waits up to `timeout`; on overrun the child is killed and reaped.
+fn run_with_timeout(mut command: Command, timeout: Duration) -> bool {
+    let Ok(mut child) = command.spawn() else {
+        return false;
+    };
+    let deadline = Instant::now() + timeout;
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => return status.success(),
+            Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(100)),
+            _ => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return false;
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -216,10 +285,45 @@ mod tests {
 
 #[cfg(test)]
 mod live {
+    use crate::limits::claude::{ClaudeProvider, parse_claude_creds};
+
+    /// Only the expiry of the Claude login, in Unix milliseconds (the token is never kept).
+    fn claude_expires_at_ms() -> Option<i64> {
+        let text = std::fs::read_to_string(ClaudeProvider::default_path()).ok()?;
+        parse_claude_creds(&text).ok()?.expires_at_ms
+    }
+
+    fn now_ms() -> i64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_millis() as i64)
+    }
+
     #[test]
     #[ignore = "runs the locally installed Claude Code CLI"]
     fn live_claude_auth_status_runs_hidden() {
         assert!(super::run_login_status(crate::model::Kind::Claude));
+    }
+
+    /// Verifies #52 end to end. Run it only while the Claude access token is already expired
+    /// (e.g. after the PC slept past `expiresAt`, with no Claude Code session open):
+    /// `cargo test --lib live_claude_renews_an_expired_login -- --ignored --nocapture`.
+    /// It runs `claude auth status` exactly as the widget does and checks that the CLI renewed
+    /// its own login (`expiresAt` moved into the future). It skips when the token is still valid.
+    #[test]
+    #[ignore = "needs an expired Claude login; runs the locally installed Claude Code CLI"]
+    fn live_claude_renews_an_expired_login() {
+        let before = claude_expires_at_ms().expect("Claude login with expiresAt");
+        if before > now_ms() {
+            eprintln!("skipped: the Claude access token has not expired yet");
+            return;
+        }
+        assert!(super::run_login_status(crate::model::Kind::Claude));
+        let after = claude_expires_at_ms().expect("Claude login with expiresAt");
+        assert!(
+            after > now_ms(),
+            "claude auth status did not renew the login"
+        );
     }
 
     #[test]
@@ -415,6 +519,161 @@ mod resolve_tests {
         assert!(dir.is_absolute(), "{dir:?}");
         assert!(dir.join("cmd.exe").is_file(), "{dir:?}");
         assert!(dir.ends_with("System32") || dir.ends_with("system32"));
+    }
+
+    #[test]
+    fn only_claude_needs_a_terminal() {
+        // Claude Code treats a redirected stdout as non-interactive and then does not renew an
+        // expired login (#52); Codex renews without one.
+        assert!(needs_terminal(Kind::Claude));
+        assert!(!needs_terminal(Kind::Codex));
+        assert!(!needs_terminal(Kind::Hardware));
+    }
+
+    const SYS: &str = r"C:\Windows\System32";
+
+    #[test]
+    fn exe_command_line_quotes_the_resolved_path() {
+        assert_eq!(
+            process_command_line(
+                Path::new(r"C:\Users\u v\.local\bin\claude.exe"),
+                &["auth", "status"],
+                Path::new(SYS)
+            ),
+            Some((
+                p(r"C:\Users\u v\.local\bin\claude.exe"),
+                r#""C:\Users\u v\.local\bin\claude.exe" auth status"#.to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn cmd_shim_runs_through_system_cmd_without_autorun() {
+        assert_eq!(
+            process_command_line(
+                Path::new(r"C:\Users\u\AppData\Roaming\npm\claude.CMD"),
+                &["auth", "status"],
+                Path::new(SYS)
+            ),
+            Some((
+                p(r"C:\Windows\System32\cmd.exe"),
+                r#""C:\Windows\System32\cmd.exe" /e:ON /v:OFF /d /c ""C:\Users\u\AppData\Roaming\npm\claude.CMD" auth status""#
+                    .to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn command_line_refuses_what_it_cannot_quote_safely() {
+        let sys = Path::new(SYS);
+        let st = &["auth", "status"][..];
+        // A quote would end the quoted path early.
+        assert_eq!(
+            process_command_line(Path::new(r#"C:\a"b\claude.exe"#), st, sys),
+            None
+        );
+        // cmd.exe expands %VAR% even inside quotes.
+        assert_eq!(
+            process_command_line(Path::new(r"C:\a%PATH%\claude.cmd"), st, sys),
+            None
+        );
+        // Only fixed, plain arguments are passed.
+        let bad = &["auth", "status & calc"][..];
+        assert_eq!(
+            process_command_line(Path::new(r"C:\a\claude.exe"), bad, sys),
+            None
+        );
+        assert_eq!(
+            process_command_line(Path::new(r"C:\a\claude.exe"), &[""], sys),
+            None
+        );
+        // Relative paths and other extensions are never run.
+        assert_eq!(
+            process_command_line(Path::new(r"claude.exe"), st, sys),
+            None
+        );
+        assert_eq!(
+            process_command_line(Path::new(r"C:\a\claude.bat"), st, sys),
+            None
+        );
+        assert_eq!(
+            process_command_line(Path::new(r"C:\a\claude"), st, sys),
+            None
+        );
+    }
+
+    #[test]
+    fn percent_is_fine_in_an_exe_path() {
+        let line =
+            process_command_line(Path::new(r"C:\100%\claude.exe"), &["auth"], Path::new(SYS));
+        assert_eq!(
+            line.map(|(_, l)| l),
+            Some(r#""C:\100%\claude.exe" auth"#.to_string())
+        );
+    }
+
+    /// Real spawn under a pseudo console: the child's stdout must be a console, not a pipe or
+    /// NUL, which is what Claude Code checks (`process.stdout.isTTY`) before acting interactive.
+    #[test]
+    fn terminal_runner_gives_the_child_a_console_stdout() {
+        let sys = system_dir().unwrap();
+        let out =
+            std::env::temp_dir().join(format!("cct-keepalive-tty-{}.txt", std::process::id()));
+        let _ = std::fs::remove_file(&out);
+        let ps = sys.join(r"WindowsPowerShell\v1.0\powershell.exe");
+        let script = format!(
+            "[IO.File]::WriteAllText('{}', \"$([Console]::IsOutputRedirected)\")",
+            out.display()
+        );
+        let line = format!(
+            r#""{}" -NoLogo -NoProfile -NonInteractive -Command "{script}""#,
+            ps.display()
+        );
+
+        let code = run_in_terminal(&ps, &line, &sys, 60_000);
+        let seen = std::fs::read_to_string(&out).unwrap_or_default();
+        let _ = std::fs::remove_file(&out);
+
+        assert_eq!(code, Some(0));
+        assert_eq!(seen.trim(), "False", "stdout should not be redirected");
+    }
+
+    #[test]
+    fn terminal_runner_kills_a_child_that_overruns_the_timeout() {
+        let sys = system_dir().unwrap();
+        let ping = sys.join("PING.EXE");
+        let line = format!(r#""{}" -n 30 127.0.0.1"#, ping.display());
+        let started = std::time::Instant::now();
+        assert_eq!(run_in_terminal(&ping, &line, &sys, 500), None);
+        assert!(started.elapsed() < std::time::Duration::from_secs(10));
+    }
+
+    #[test]
+    fn terminal_runner_runs_a_cmd_shim_with_trusted_dir_and_exact_args() {
+        let base = std::env::temp_dir().join(format!(
+            "cct-keepalive-pty-{} a&b ^c (d)",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        let shim = base.join("claude.cmd");
+        std::fs::write(
+            &shim,
+            "@echo off\r\n> \"%~dp0out.txt\" echo cwd=%CD%;args=%*\r\n",
+        )
+        .unwrap();
+        let cwd = system_dir().unwrap();
+
+        let (app, line) = process_command_line(&shim, &["auth", "status"], &cwd).unwrap();
+        let code = run_in_terminal(&app, &line, &cwd, 30_000);
+        let out = std::fs::read_to_string(base.join("out.txt")).unwrap_or_default();
+        let _ = std::fs::remove_dir_all(&base);
+
+        assert_eq!(code, Some(0));
+        assert_eq!(
+            out.trim().to_lowercase(),
+            format!("cwd={};args=auth status", cwd.display()).to_lowercase()
+        );
     }
 
     /// Real spawn of a `.cmd` shim in a directory whose name needs quoting and contains cmd

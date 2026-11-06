@@ -6,6 +6,7 @@ pub mod http;
 pub mod keepalive;
 pub mod reset;
 pub mod state;
+pub mod terminal;
 pub mod worker;
 
 /// Usage of one limit window (5-hour or weekly).
