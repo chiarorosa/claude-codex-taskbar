@@ -4,6 +4,51 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] - 2026-11-09
+
+### Added
+- **Claude account switcher.** Save your paid Claude Code logins (Pro, Max, Team, Enterprise)
+  and switch between them from the right-click menu (**Claude account**), without `/logout` and
+  `/login` (#53, #54, #55, #56, #57).
+  - Claude Code picks up the new login on its next request; no restart is needed.
+  - Always manual: the app never switches on its own and never rotates accounts.
+  - Asks first when a Claude Code task is running or waiting for your answer (for example on
+    a permission prompt), because the rest of that task would run on the other account.
+  - Each entry shows the plan and the usage last seen on that account, and warns when a saved
+    login is about to expire (`⚠ login expires in Nd`) or has expired (`⚠ needs /login`).
+  - Saved logins are encrypted with Windows DPAPI for your user. A switch holds Claude Code's
+    own lock files, backs up the account being left, writes through a temp file, and restores
+    everything if any step fails.
+  - Applies to the `claude` CLI only: the Claude desktop app keeps its own login. Not supported
+    when `CLAUDE_CONFIG_DIR` is set.
+- **Account labels on the strip.** A short label (up to 5 characters, default `P`) before the
+  Claude and the Codex gauges, in each service's color, tells you which account the numbers
+  belong to, e.g. `P` for personal and `W` for work. Each saved Claude account has its own
+  label, so a switch changes it too. Edit it in Settings; leave it empty to hide it (#74).
+- Groundwork for limit notifications: detection of 80% / 95% crossings per provider and window,
+  with no repeats until a real reset, and opt-in settings `notify_near_limit` and
+  `notify_thresholds` in `config.json`. Nothing is shown yet; the notification itself is the
+  next part of #15 (#73, thanks @gnevesx).
+
+### Fixed
+- Windows 10: Settings and the tooltip now explain why the strip stays hidden (there is no
+  free taskbar corner there) instead of showing nothing (#64, #71, thanks @Daiyuanranfeng;
+  confirmed by @pedrohassen).
+
+### Changed
+- **Settings window redesigned** in the style of the Windows 10/11 Settings app: cards,
+  on/off switches, item chips and clear login status lines. It follows the Windows light or
+  dark app theme and your accent color, live, uses system colors in High Contrast, adapts to
+  each monitor's scaling, and scrolls when the screen is short. Changes apply immediately (no
+  OK/Cancel; Esc closes). Switches and chips are real checkboxes underneath, so the keyboard
+  and Narrator keep working. Design rules are in the new `DESIGN.md` (#58).
+- Changing visible items or the hardware interval no longer triggers a limits fetch.
+- Privacy: the account switcher is the one exception to read-only credentials. Only when you
+  pick an account to switch to does the app write `~/.claude/.credentials.json` and the
+  `oauthAccount` key of `~/.claude.json`; *Save current account* only reads them. The Codex login
+  is never written, and tokens are never refreshed in-app. README, SECURITY.md and AGENTS.md
+  are updated.
+
 ## [0.3.0] - 2026-11-09
 
 ### Added
@@ -80,6 +125,7 @@ All notable changes to this project are documented here. The format follows
   5-hour/weekly limits, tooltip with reset times, settings window, start with Windows,
   English and Brazilian Portuguese UI.
 
+[0.4.0]: https://github.com/chiarorosa/claude-codex-taskbar/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/chiarorosa/claude-codex-taskbar/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/chiarorosa/claude-codex-taskbar/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/chiarorosa/claude-codex-taskbar/compare/v0.1.0...v0.2.0

@@ -1,6 +1,6 @@
 [package]
 name = "claude-codex-taskbar"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 description = "CCT: Windows 10/11 taskbar widget showing Claude Code / Codex usage limits and CPU, RAM, GPU, disk usage"
 license = "MIT"
