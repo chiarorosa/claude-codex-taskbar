@@ -42,7 +42,8 @@ Know, without interrupting your work, whether your PC is under load and how much
 - **Color cues**: progress bars turn yellow near the limit and red when close to it.
 - **Hover** for a tooltip with reset times and a countdown to known future resets, last update time, and error details. The countdown follows the absolute time, e.g. `resets at 14:20 (in 1h 12m)`, using minutes, hours/minutes or days/hours and omitting a zero second unit (`1h`, `7d`).
 - **Double-click** the strip to refresh the limits right away (same as **Refresh now**).
-- **Right-click** for a menu: **Settings**, **Refresh now**, **Copy usage** (copies the tooltip text, handy for bug reports), **Start with Windows**, **Exit**.
+- **Right-click** for a menu: **Settings**, **Refresh now**, **Copy usage** (copies the tooltip text, handy for bug reports), **Claude account**, **Start with Windows**, **Exit**.
+- **Claude account switcher**: save your paid Claude Code logins and switch between them from the right-click menu, always by hand, without `/logout` and `/login` (see [Multiple Claude accounts](#multiple-claude-accounts)).
 - **Plays nice with the taskbar** (see below).
 
 ### Stays out of your way
@@ -158,7 +159,10 @@ Install this app: the taskbar shows the percentage used of your Claude Code 5-ho
 Same app: with the Codex CLI logged in (`codex login`), the strip shows the 5-hour and weekly percentages that `/status` reports in Codex.
 
 ### Does it need an API key or my password?
-No. It reads the login that the official `claude` and `codex` CLIs already saved on your PC, read-only, and talks only to the providers' own endpoints.
+No. It reads the login that the official `claude` and `codex` CLIs already saved on your PC, read-only, and talks only to the providers' own endpoints. The only time it writes a login is when you switch Claude accounts yourself (see [Multiple Claude accounts](#multiple-claude-accounts)).
+
+### Can I switch between two Claude Code accounts on Windows?
+Yes, if both are paid plans (Pro, Max, Team or Enterprise). Save each login once from the right-click menu (**Claude account → Save current account**), then pick one to switch. Claude Code uses the new account from its next request, without a restart. Switching is always manual and applies to the `claude` CLI, not to the Claude desktop app.
 
 ### Does it work on Windows 10?
 It runs on Windows 10 (x64), but the strip stays hidden there for now. Windows 10 keeps the Start button and the search box in the taskbar's left corner, so there is no free spot for the strip without covering them. Placing it next to the system tray is tracked in [#10](https://github.com/chiarorosa/claude-codex-taskbar/issues/10). Launching `claude-codex-taskbar.exe` again opens **Settings** in the running instance.
