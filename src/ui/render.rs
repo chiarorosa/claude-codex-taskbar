@@ -41,6 +41,11 @@ pub const GAP: f32 = 10.0;
 pub const SEP_W: f32 = 1.0;
 const SEP_H: f32 = 30.0;
 const ELLIPSIS: &str = "…";
+/// Space between an account label and its gauge (#74).
+const BADGE_GAP: f32 = 5.0;
+/// Account label badge: horizontal padding and height, square corners.
+const BADGE_PAD: f32 = 4.0;
+const BADGE_H: f32 = 16.0;
 
 struct Palette {
     label: u32,
@@ -156,12 +161,20 @@ impl Renderer {
                     .text_width(&value_text(item.value), &self.value_fmt)
                     .max(BAR_W);
                 let label = self.text_width(&item.label, &self.label_fmt);
+                let badge = self.badge_width(item);
                 ItemMetrics {
-                    full_w: to_px(value.max(label), dpi),
-                    compact_w: to_px(value, dpi),
+                    full_w: to_px(badge + value.max(label), dpi),
+                    compact_w: to_px(badge + value, dpi),
                 }
             })
             .collect()
+    }
+
+    /// Width in DIPs an item's account label takes, gap included; 0 without a label.
+    fn badge_width(&self, item: &ItemView) -> f32 {
+        item.badge.as_deref().map_or(0.0, |b| {
+            self.text_width(b, &self.value_fmt).ceil() + 2.0 * BADGE_PAD + BADGE_GAP
+        })
     }
 
     pub fn ellipsis_px(&self, dpi: u32) -> i32 {
@@ -287,13 +300,38 @@ impl Renderer {
                     x += GAP;
                 }
                 let item = &items[i];
-                let col_w = to_dip(
+                let mut col_w = to_dip(
                     match layout.mode {
                         Mode::Full => metrics[i].full_w,
                         Mode::Compact => metrics[i].compact_w,
                     },
                     dpi,
                 );
+                // Account label: a square-cornered badge in the service color with white
+                // text, centered on the whole block (#74).
+                if let Some(badge) = item.badge.as_deref() {
+                    let bw = self.badge_width(item);
+                    let by = top + (block_h - BADGE_H) / 2.0;
+                    let r = D2D_RECT_F {
+                        left: x,
+                        top: by,
+                        right: x + bw - BADGE_GAP,
+                        bottom: by + BADGE_H,
+                    };
+                    set(bar_color(item.kind, Some(0.0)), 1.0);
+                    rt.FillRectangle(&r, &brush);
+                    set(0xffffff, 1.0);
+                    rt.DrawText(
+                        &wide(badge),
+                        &self.value_fmt,
+                        &r,
+                        &brush,
+                        D2D1_DRAW_TEXT_OPTIONS_NONE,
+                        DWRITE_MEASURING_MODE_NATURAL,
+                    );
+                    x += bw;
+                    col_w -= bw;
+                }
                 let mut y = top;
                 if layout.mode == Mode::Full {
                     set(palette.label, 1.0);

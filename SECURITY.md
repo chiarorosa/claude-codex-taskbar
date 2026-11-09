@@ -44,11 +44,11 @@ Please give us reasonable time to release a fix before disclosing the issue publ
 
 These rules are part of the project's design. Any violation is treated as a security bug, and contributions must follow them:
 
-1. **Read-only access.** The app only reads `%USERPROFILE%\.claude\.credentials.json` and `%USERPROFILE%\.codex\auth.json` (or `%CODEX_HOME%\auth.json`). It never writes, moves, locks for writing, or deletes these files.
+1. **Read-only access.** The app only reads `%USERPROFILE%\.claude\.credentials.json` and `%USERPROFILE%\.codex\auth.json` (or `%CODEX_HOME%\auth.json`). It never writes, moves, locks for writing, or deletes these files. **One exception, the Claude account switcher (#53):** when the user explicitly clicks *Switch*, the app writes `%USERPROFILE%\.claude\.credentials.json` and the `oauthAccount` key of `%USERPROFILE%\.claude.json`, holding Claude Code's own lock directories, through a temp file and rename, after backing up the outgoing login, and restores both files if any step fails. The Codex login is never written.
 2. **No token refresh.** The app never refreshes or rotates tokens. An expired token is shown as an "expired" state, and the user is asked to re-open the official CLI.
 3. **Single destination.** A provider's credentials are only ever sent to that provider's own endpoint over HTTPS (Anthropic credentials to Anthropic, OpenAI credentials to OpenAI). Never to any other host, proxy, or service.
-4. **Never logged or persisted.** Tokens, account IDs, and raw credential file contents must never appear in logs, debug output, error messages, panic messages, crash dumps produced by the app, settings files, or the clipboard. Tokens are not cached on disk.
-5. **Minimal lifetime in memory.** Read credentials only when needed for a request and do not keep extra copies.
+4. **Never logged or persisted.** Tokens, account IDs, and raw credential file contents must never appear in logs, debug output, error messages, panic messages, crash dumps produced by the app, settings files, or the clipboard. Tokens are not cached on disk, except the Claude logins the user saves for the account switcher: those live in `%APPDATA%\claude-codex-taskbar\accounts\`, each encrypted with DPAPI for the current Windows user, next to an index that holds no tokens.
+5. **Minimal lifetime in memory.** Read credentials only when needed for a request or an explicit switch, and do not keep extra copies.
 6. **No telemetry.** The app sends no analytics or usage data anywhere. Network access is limited to the usage endpoints of the providers the user has enabled.
 7. **Fake fixtures only.** Tests and fixtures must use obviously fake tokens. Never commit real credentials.
 8. **No elevation.** The app runs without administrator privileges.

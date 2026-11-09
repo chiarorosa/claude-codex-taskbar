@@ -5,7 +5,9 @@
 
 pub mod fsio;
 pub mod lock;
+pub mod sessions;
 pub mod store;
+pub mod switch;
 pub mod vault;
 
 /// Credential text. `Debug` never prints it.

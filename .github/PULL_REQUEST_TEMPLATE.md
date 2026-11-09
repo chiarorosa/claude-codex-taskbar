@@ -33,7 +33,7 @@ Closes #
 - [ ] `cargo test` passes
 - [ ] New parsing/logic code has unit tests (fixtures use fake tokens only)
 - [ ] No credentials, tokens, or account IDs are logged, persisted, or sent anywhere other than the provider's own endpoint
-- [ ] Credential files are still only read, never written
+- [ ] Credential files are still only read, never written (outside `src/limits/switcher/`)
 - [ ] No telemetry or new network destinations added
 - [ ] New dependencies (if any) are justified below and keep the binary small
 - [ ] Docs (README, CONTRIBUTING, etc.) updated if behavior changed

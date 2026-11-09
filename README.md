@@ -42,7 +42,8 @@ Know, without interrupting your work, whether your PC is under load and how much
 - **Color cues**: progress bars turn yellow near the limit and red when close to it.
 - **Hover** for a tooltip with reset times and a countdown to known future resets, last update time, and error details. The countdown follows the absolute time, e.g. `resets at 14:20 (in 1h 12m)`, using minutes, hours/minutes or days/hours and omitting a zero second unit (`1h`, `7d`).
 - **Double-click** the strip to refresh the limits right away (same as **Refresh now**).
-- **Right-click** for a menu: **Settings**, **Refresh now**, **Copy usage** (copies the tooltip text, handy for bug reports), **Start with Windows**, **Exit**.
+- **Right-click** for a menu: **Settings**, **Refresh now**, **Copy usage** (copies the tooltip text, handy for bug reports), **Claude account**, **Start with Windows**, **Exit**.
+- **Claude account switcher**: save your paid Claude Code logins and switch between them from the right-click menu, always by hand, without `/logout` and `/login` (see [Multiple Claude accounts](#multiple-claude-accounts)).
 - **Plays nice with the taskbar** (see below).
 
 ### Stays out of your way
@@ -118,11 +119,27 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the toolchain setup.
 - **Keep login active (experimental, off by default), for Claude Code and Codex.** If you opt in (the app asks once on first run; also in **Settings**, one switch per provider), when a token has expired the app runs the CLI's own status command hidden (`claude auth status` or `codex login status`), at most every 15 minutes per provider, so the official CLI renews its own login. It sends no prompt and uses no quota. The tooltip tells you whether the renewal worked. **Feedback wanted:** please open an issue saying whether it renewed your login.
 - **Codex offline?** If the endpoint fails, the strip first asks the installed Codex CLI (`codex app-server --listen stdio://`) for live limits, and if that also fails, falls back to the last limits the Codex CLI wrote to its session logs, dimmed, as long as that window has not reset yet.
 
+### Multiple Claude accounts
+
+Have more than one paid Claude plan (say, personal and work)? Switch between them from the strip, without `/logout` and `/login`:
+
+1. While logged in to the first account in Claude Code, right-click the strip → **Claude account → Save current account**.
+2. In Claude Code, run `/login` with the second account, then **Save current account** again.
+3. From then on, pick an account under **Claude account** to switch. Claude Code picks up the new login on its next request; no restart is needed. If a task is running, or is waiting for your answer (for example on a permission prompt), the app asks first, because the rest of that task runs on the new account.
+
+Each entry shows the plan and the usage last seen on that account. `⚠ login expires in Nd` warns that a saved login is about to expire; `⚠ needs /login` means it has, so log in with that account and save it again. Remove an account under **Claude account → Remove saved account**.
+
+- **Paid plans only.** Pro, Max, Team and Enterprise logins can be saved. Free logins and active Claude Code trials can't.
+- **Claude Code CLI only.** Switching changes the login in `~/.claude/.credentials.json`, which the `claude` CLI uses. The Claude desktop app keeps its own login elsewhere, so switching does not change the account it uses.
+- **Always manual.** The app never switches on its own and never rotates accounts to get around usage limits.
+- **Use only accounts that belong to you.** Sharing logins or reselling access violates Anthropic's terms.
+- **How it is kept safe.** Saved logins are encrypted with Windows DPAPI for your user, in `%APPDATA%\claude-codex-taskbar\accounts\`. A switch holds Claude Code's own lock files, backs up the account being left (so its renewed token is never lost), writes through a temp file, and restores everything if any step fails. Not supported when `CLAUDE_CONFIG_DIR` is set.
+
 ## Privacy
 
 - **No telemetry.** The app does not phone home, collect analytics, or check for updates in the background.
 - **Network access is limited** to the providers' own usage endpoints, and only for the providers you enable.
-- **Credentials are read-only.** The app reads `~/.claude/.credentials.json` and `~/.codex/auth.json` (respecting `CODEX_HOME`) but never writes to them, never refreshes tokens, and never competes with the official CLIs.
+- **Credentials are read-only.** The app reads `~/.claude/.credentials.json` and `~/.codex/auth.json` (respecting `CODEX_HOME`) but never writes to them, never refreshes tokens, and never competes with the official CLIs. The one exception is switching Claude accounts: only when you click *Switch*, the app writes the Claude login, under Claude Code's own locks and with a backup.
 - **Credentials are never logged, copied, or sent anywhere** except to the corresponding provider's own endpoint.
 - **No other programs are run**, except when the Codex HTTP endpoint fails (it queries the local `codex app-server` over stdio, hidden) or when you turn on *Keep login active*, which runs only `claude auth status` and/or `codex login status` (hidden, output discarded).
 - Settings are stored locally in `%APPDATA%`.
@@ -142,7 +159,10 @@ Install this app: the taskbar shows the percentage used of your Claude Code 5-ho
 Same app: with the Codex CLI logged in (`codex login`), the strip shows the 5-hour and weekly percentages that `/status` reports in Codex.
 
 ### Does it need an API key or my password?
-No. It reads the login that the official `claude` and `codex` CLIs already saved on your PC, read-only, and talks only to the providers' own endpoints.
+No. It reads the login that the official `claude` and `codex` CLIs already saved on your PC, read-only, and talks only to the providers' own endpoints. The only time it writes a login is when you switch Claude accounts yourself (see [Multiple Claude accounts](#multiple-claude-accounts)).
+
+### Can I switch between two Claude Code accounts on Windows?
+Yes, if both are paid plans (Pro, Max, Team or Enterprise). Save each login once from the right-click menu (**Claude account → Save current account**), then pick one to switch. Claude Code uses the new account from its next request, without a restart. Switching is always manual and applies to the `claude` CLI, not to the Claude desktop app.
 
 ### Does it work on Windows 10?
 It runs on Windows 10 (x64), but the strip stays hidden there for now. Windows 10 keeps the Start button and the search box in the taskbar's left corner, so there is no free spot for the strip without covering them. Placing it next to the system tray is tracked in [#10](https://github.com/chiarorosa/claude-codex-taskbar/issues/10). Launching `claude-codex-taskbar.exe` again opens **Settings** in the running instance.

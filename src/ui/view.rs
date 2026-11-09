@@ -17,6 +17,9 @@ pub struct ItemView {
     pub value: Option<f32>,
     /// Data is old (stale or from session logs): bar drawn at half opacity.
     pub dim: bool,
+    /// Account label drawn before this item, in the provider's color (#74). Set on the
+    /// first visible item of each provider so it hides together with that provider.
+    pub badge: Option<String>,
 }
 
 /// Taskbar facts that decide which setup hints apply.
@@ -44,11 +47,14 @@ fn usage_of(status: &ProviderStatus) -> Option<(&ProviderUsage, bool)> {
     }
 }
 
+/// `claude_label` is the live Claude account's label (it depends on the saved accounts);
+/// the Codex label comes from `cfg`.
 pub fn build_items(
     cfg: &Config,
     hw: &HwSnapshot,
     claude: &ProviderStatus,
     codex: &ProviderStatus,
+    claude_label: &str,
     lang: Lang,
 ) -> Vec<ItemView> {
     let mut items = Vec::new();
@@ -60,6 +66,7 @@ pub fn build_items(
                 label,
                 value,
                 dim,
+                badge: None,
             });
         }
     };
@@ -109,6 +116,16 @@ pub fn build_items(
             pct(|u| &u.weekly),
             dim,
         );
+    }
+    for (kind, label) in [
+        (Kind::Claude, claude_label),
+        (Kind::Codex, cfg.codex_label.as_str()),
+    ] {
+        if let Some(first) = items.iter_mut().find(|i| i.kind == kind)
+            && !label.is_empty()
+        {
+            first.badge = Some(label.to_string());
+        }
     }
     items
 }
@@ -325,6 +342,75 @@ mod tests {
         }
     }
 
+    fn ok(five: f32, week: f32) -> ProviderStatus {
+        ProviderStatus::Ok {
+            usage: usage(five, week),
+            at: 0,
+        }
+    }
+
+    fn badges(items: &[ItemView]) -> Vec<(ItemId, Option<&str>)> {
+        items
+            .iter()
+            .map(|i| (i.id.clone(), i.badge.as_deref()))
+            .filter(|(id, _)| {
+                !matches!(
+                    id,
+                    ItemId::Cpu | ItemId::Ram | ItemId::Gpu | ItemId::Disk(_)
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn each_provider_label_sits_on_its_first_item() {
+        let cfg = Config {
+            codex_label: "W".into(),
+            ..Config::default()
+        };
+        let items = build_items(&cfg, &hw(), &ok(1.0, 2.0), &ok(3.0, 4.0), "Pess", Lang::En);
+        assert_eq!(
+            badges(&items),
+            [
+                (ItemId::ClaudeFive, Some("Pess")),
+                (ItemId::ClaudeWeek, None),
+                (ItemId::CodexFive, Some("W")),
+                (ItemId::CodexWeek, None),
+            ]
+        );
+        assert!(
+            items
+                .iter()
+                .filter(|i| i.kind == Kind::Hardware)
+                .all(|i| i.badge.is_none())
+        );
+    }
+
+    #[test]
+    fn the_label_moves_to_the_weekly_item_when_5h_is_hidden() {
+        let mut cfg = Config::default();
+        cfg.set_visible(&ItemId::ClaudeFive, false);
+        let items = build_items(
+            &cfg,
+            &hw(),
+            &ok(1.0, 2.0),
+            &ProviderStatus::Disabled,
+            "P",
+            Lang::En,
+        );
+        assert_eq!(badges(&items), [(ItemId::ClaudeWeek, Some("P"))]);
+    }
+
+    #[test]
+    fn an_empty_label_shows_no_badge() {
+        let cfg = Config {
+            codex_label: String::new(),
+            ..Config::default()
+        };
+        let items = build_items(&cfg, &hw(), &ok(1.0, 2.0), &ok(3.0, 4.0), "", Lang::En);
+        assert!(items.iter().all(|i| i.badge.is_none()));
+    }
+
     #[test]
     fn items_in_order_with_labels() {
         let claude = ProviderStatus::Ok {
@@ -336,6 +422,7 @@ mod tests {
             &hw(),
             &claude,
             &ProviderStatus::Disabled,
+            "P",
             Lang::PtBr,
         );
         let labels: Vec<_> = items.iter().map(|i| i.label.as_str()).collect();
@@ -355,7 +442,14 @@ mod tests {
             usage: usage(1.0, 2.0),
             at: 0,
         };
-        let items = build_items(&cfg, &hw(), &ProviderStatus::Disabled, &codex, Lang::En);
+        let items = build_items(
+            &cfg,
+            &hw(),
+            &ProviderStatus::Disabled,
+            &codex,
+            "P",
+            Lang::En,
+        );
         let ids: Vec<_> = items.iter().map(|i| i.id.clone()).collect();
         assert_eq!(
             ids,
@@ -376,7 +470,7 @@ mod tests {
             at: 0,
             err: FetchError::Network("x".into()),
         };
-        let items = build_items(&Config::default(), &hw(), &claude, &codex, Lang::En);
+        let items = build_items(&Config::default(), &hw(), &claude, &codex, "P", Lang::En);
         let claude5 = items.iter().find(|i| i.id == ItemId::ClaudeFive).unwrap();
         assert_eq!(claude5.value, None);
         assert!(!claude5.dim);
@@ -450,6 +544,7 @@ mod tests {
             label: "GPU".into(),
             value: Some(12.0),
             dim: false,
+            badge: None,
         }];
         let tip = tooltip_text(
             Lang::En,
