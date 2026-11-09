@@ -230,6 +230,7 @@ mod tests {
             login_expires_at: Some(NOW + 30 * 86400),
             last_seen: None,
             saved_at: NOW,
+            label: None,
         }
     }
 

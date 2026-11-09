@@ -6,7 +6,7 @@ use super::accounts::{
 };
 use crate::i18n::{Key, Lang, fmt, t};
 use crate::limits::switcher::sessions::busy_now;
-use crate::limits::switcher::store::{LastSeen, Store, read_live};
+use crate::limits::switcher::store::{LastSeen, Store, claude_label, read_live};
 use crate::limits::switcher::switch::{SwitchError, Switched, switch_to};
 use crate::timeutil::now_unix;
 use std::path::PathBuf;
@@ -38,6 +38,24 @@ fn home() -> Option<PathBuf> {
 
 fn config_dir_override() -> bool {
     std::env::var_os("CLAUDE_CONFIG_DIR").is_some_and(|v| !v.is_empty())
+}
+
+/// The saved account that holds the live Claude login, if any.
+pub fn live_slot() -> Option<u32> {
+    let accounts = Store::new(Store::default_dir()).load().ok()?;
+    let live = home().and_then(|h| read_live(&h).ok());
+    live_state(&accounts, live.as_ref(), now_unix()).slot
+}
+
+/// The label to show before the Claude gauges right now (#74): the live saved account's own
+/// label, else `default`.
+pub fn live_claude_label(default: &str) -> String {
+    let Ok(accounts) = Store::new(Store::default_dir()).load() else {
+        return default.to_string();
+    };
+    let live = home().and_then(|h| read_live(&h).ok());
+    let slot = live_state(&accounts, live.as_ref(), now_unix()).slot;
+    claude_label(default, &accounts.slots, slot)
 }
 
 /// The submenu's model for right now, or `None` to leave it out of the menu.
@@ -195,6 +213,10 @@ fn start_switch(hwnd: HWND, target: u32, lang: Lang, last_seen: Option<LastSeen>
     if SWITCHING.swap(true, Ordering::Relaxed) {
         return;
     }
+    // Settings shows the account being left (its label field edits that account). Close it
+    // like Esc does, so pending edits land on that account before the switch writes the
+    // account index, and a reopened window shows the new account.
+    super::settings::close_if_open();
     let strip = hwnd.0 as isize;
     let override_dir = config_dir_override();
     std::thread::spawn(move || {

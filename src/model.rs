@@ -32,7 +32,7 @@ pub(crate) fn provider_name(kind: Kind) -> &'static str {
 
 pub const COLOR_HARDWARE: u32 = 0x4cc2ff;
 pub const COLOR_CLAUDE: u32 = 0xd97757;
-pub const COLOR_CODEX: u32 = 0x10a37f;
+pub const COLOR_CODEX: u32 = 0x3b82f6;
 pub const COLOR_WARN: u32 = 0xe8a33d;
 pub const COLOR_CRITICAL: u32 = 0xe5484d;
 pub const COLOR_ERROR: u32 = 0x5a5a5a;
@@ -66,7 +66,7 @@ mod tests {
     fn bar_colors_follow_thresholds() {
         assert_eq!(bar_color(Kind::Hardware, Some(10.0)), 0x4cc2ff);
         assert_eq!(bar_color(Kind::Claude, Some(74.9)), 0xd97757);
-        assert_eq!(bar_color(Kind::Codex, Some(50.0)), 0x10a37f);
+        assert_eq!(bar_color(Kind::Codex, Some(50.0)), 0x3b82f6, "Codex blue");
         assert_eq!(bar_color(Kind::Codex, Some(75.0)), 0xe8a33d);
         assert_eq!(bar_color(Kind::Claude, Some(90.0)), 0xe5484d);
         assert_eq!(bar_color(Kind::Hardware, Some(100.0)), 0xe5484d);

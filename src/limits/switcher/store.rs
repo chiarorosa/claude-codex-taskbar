@@ -48,6 +48,9 @@ pub struct Slot {
     pub last_seen: Option<LastSeen>,
     #[serde(default)]
     pub saved_at: i64,
+    /// Shown before the Claude gauges while this account is live (#74). Not a secret.
+    #[serde(default)]
+    pub label: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -155,6 +158,15 @@ pub fn parse_login(creds_text: &str) -> Option<LoginInfo> {
             .map(String::from),
         refresh_expires_at: oauth.get("refreshTokenExpiresAt").and_then(timestamp_secs),
     })
+}
+
+/// The label shown before the Claude gauges: the live saved account's own label, else the
+/// config default (#74).
+pub fn claude_label(default: &str, slots: &[Slot], live_slot: Option<u32>) -> String {
+    live_slot
+        .and_then(|id| slots.iter().find(|s| s.id == id))
+        .and_then(|s| s.label.clone())
+        .unwrap_or_else(|| default.to_string())
 }
 
 /// The paid-plans gate (#53, "Paid plans only"). Fails closed.
@@ -393,9 +405,10 @@ impl Store {
             let max = accounts.slots.iter().map(|s| s.id).max().unwrap_or(0);
             accounts.next_id.max(max + 1).max(1)
         });
-        let last_seen = existing
-            .and_then(|id| accounts.slots.iter().find(|s| s.id == id))
-            .and_then(|s| s.last_seen.clone());
+        let previous = existing.and_then(|id| accounts.slots.iter().find(|s| s.id == id));
+        let last_seen = previous.and_then(|s| s.last_seen.clone());
+        // A renewed login keeps the label the user gave the account.
+        let label = previous.and_then(|s| s.label.clone());
         let slot = Slot {
             id,
             email: identity.email,
@@ -406,6 +419,7 @@ impl Store {
             login_expires_at: login.refresh_expires_at,
             last_seen,
             saved_at: now,
+            label,
         };
         self.write_credential(id, &live.credentials)?;
         self.write_oauth(id, &oauth)?;
@@ -420,6 +434,18 @@ impl Store {
             id,
             created: existing.is_none(),
         })
+    }
+
+    /// Sets the label of saved account `id` (normalized like the config labels).
+    pub fn set_label(&self, id: u32, label: &str) -> io::Result<()> {
+        let mut accounts = self.load()?;
+        let slot = accounts
+            .slots
+            .iter_mut()
+            .find(|s| s.id == id)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no such account"))?;
+        slot.label = Some(crate::config::normalize_label(label));
+        self.save_index(&accounts)
     }
 
     /// Deletes a slot and its files.
@@ -496,6 +522,7 @@ mod tests {
             login_expires_at: None,
             last_seen: None,
             saved_at: 0,
+            label: None,
         }
     }
 
@@ -846,6 +873,58 @@ mod tests {
                 "{name}"
             );
         }
+    }
+
+    #[test]
+    fn an_index_from_before_labels_loads_without_them() {
+        let store = Store::new(temp_dir("store-label-old"));
+        std::fs::create_dir_all(store.dir()).unwrap();
+        std::fs::write(
+            store.dir().join("accounts.json"),
+            r#"{"slots":[{"id":1,"email":"a@x.com","plan":"pro"}],"activeId":1,"nextId":2}"#,
+        )
+        .unwrap();
+        assert_eq!(store.load().unwrap().slots[0].label, None);
+    }
+
+    #[test]
+    fn set_label_is_stored_and_survives_saving_the_account_again() {
+        let store = Store::new(temp_dir("store-label"));
+        store
+            .save_current(&live(Some("pro"), "a", "u-1", "a@x.com"), false, NOW)
+            .unwrap();
+        store.set_label(1, "  Work ").unwrap();
+        assert_eq!(
+            store.load().unwrap().slots[0].label.as_deref(),
+            Some("Work")
+        );
+        // Saving again (a renewed login) must not drop the label.
+        store
+            .save_current(&live(Some("pro"), "a2", "u-1", "a@x.com"), false, NOW)
+            .unwrap();
+        assert_eq!(
+            store.load().unwrap().slots[0].label.as_deref(),
+            Some("Work")
+        );
+        assert!(store.set_label(9, "X").is_err(), "unknown slot");
+    }
+
+    #[test]
+    fn claude_label_prefers_the_live_accounts_own_label() {
+        let mut work = slot(2, "u-2", "w@x.com", "o");
+        work.label = Some("W".into());
+        let slots = vec![slot(1, "u-1", "p@x.com", "o"), work];
+        assert_eq!(claude_label("P", &slots, Some(2)), "W");
+        assert_eq!(
+            claude_label("P", &slots, Some(1)),
+            "P",
+            "no own label: default"
+        );
+        assert_eq!(
+            claude_label("Pess", &slots, None),
+            "Pess",
+            "unsaved login: default"
+        );
     }
 
     #[test]

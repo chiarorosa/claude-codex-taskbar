@@ -191,6 +191,9 @@ fn show_menu(hwnd: HWND) {
         other => {
             let seen = with_app(|app| super::switcher_ui::snapshot(&app.claude)).flatten();
             super::switcher_ui::handle_command(hwnd, other, lang, seen);
+            // Saving or removing an account can change the live account's label.
+            with_app(|app| app.refresh_claude_label());
+            render(hwnd);
         }
     }
 }
@@ -272,8 +275,12 @@ extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM)
         super::switcher_ui::WM_APP_SWITCHED => {
             let lang = with_app(|app| app.lang).unwrap_or(crate::i18n::Lang::En);
             if super::switcher_ui::on_switched(lparam, lang) {
-                // Show the new account's limits right away (#48).
-                with_app(|app| app.control.wake());
+                // Show the new account's limits and label right away (#48, #74).
+                with_app(|app| {
+                    app.refresh_claude_label();
+                    app.control.wake();
+                });
+                render(hwnd);
             }
             LRESULT(0)
         }

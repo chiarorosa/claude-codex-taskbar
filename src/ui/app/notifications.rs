@@ -9,6 +9,10 @@ use crate::ui::notifications::{Notice, classify_limit_result};
 
 impl App {
     pub fn on_limits(&mut self, r: LimitResult) -> Vec<Notice> {
+        if r.kind == Kind::Claude {
+            // A /login outside CCT changes the live account; catch it with each refresh.
+            self.refresh_claude_label();
+        }
         let now = now_unix();
         let status = match r.kind {
             Kind::Claude => &mut self.claude,
