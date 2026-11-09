@@ -188,8 +188,8 @@ pub fn t(lang: Lang, key: Key) -> &'static str {
             "Desative o botão de Widgets do Windows para liberar este canto (Configurações → Personalização → Barra de tarefas → Widgets)",
         ),
         Key::HintWindows10 => (
-            "On Windows 10 the taskbar icons start at the left edge, so there is no free corner for the strip yet (see #10).",
-            "No Windows 10, os ícones da barra de tarefas começam na borda esquerda, então ainda não há um canto livre para a faixa (veja #10).",
+            "On Windows 10 the taskbar icons start at the left edge, so there is no free corner for the strip yet. This may change in a future version.",
+            "No Windows 10, os ícones da barra de tarefas começam na borda esquerda, então ainda não há um canto livre para a faixa. Isso pode mudar em uma versão futura.",
         ),
         Key::HiddenItems => ("Not shown (no room):", "Não exibidos (sem espaço):"),
         Key::LoginFound => ("login found", "login encontrado"),
