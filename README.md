@@ -6,11 +6,15 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Windows 10 | 11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?logo=windows11)
 
+<p align="center">
+  <img src="docs/hero-accounts.svg" width="320" alt="A grinning developer flips a wall switch from PERSONAL to WORK; the taskbar strip below shows the work account's Claude and Codex usage">
+</p>
+
 **Personal account or work account? Always know which Claude Code / Codex account you are on, how much of its quota is left, and switch between your accounts in three clicks, right from your taskbar.**
 
 **Platforms:** Windows 11 / 10 today · macOS coming soon · Linux not yet
 
-<img src="docs/hero-accounts.svg" width="320" alt="A grinning developer flips a wall switch from PERSONAL to WORK; the taskbar strip below shows the work account's Claude and Codex usage">
+**Windows version:**
 
 ![The strip on the left corner of the Windows 11 taskbar](docs/screenshot.png)
 
