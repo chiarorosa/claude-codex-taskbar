@@ -20,7 +20,7 @@ use crate::i18n::{Key, Lang, t};
 use crate::limits::Provider;
 use crate::model::ItemId;
 use layout::{Block, Ink, Page, Px, Row};
-use model::{Toggle, Tone, config_from, status_line};
+use model::{Toggle, Tone, apply_numbers, apply_toggle, status_line};
 use paint::Painter;
 use palette::{Palette, palette, read_theme};
 use std::cell::RefCell;
@@ -476,29 +476,30 @@ fn retheme() {
     redraw_children();
 }
 
-/// Builds the config from the controls and applies it now.
-fn apply() {
-    let Some((parent, toggles, hw, limits, edits)) = with_state(|s| {
-        let toggles: Vec<(Toggle, bool)> = s
-            .checks
-            .iter()
-            .map(|c| (c.toggle.clone(), is_checked(c.hwnd)))
-            .collect();
-        (
-            s.parent,
-            toggles,
-            window_text(s.hw_edit),
-            window_text(s.limits_edit),
-            [s.hw_edit, s.limits_edit],
-        )
-    }) else {
-        return;
-    };
+/// Applies a config built from the current app config, then refreshes the strip.
+fn commit(parent: HWND, build: impl FnOnce(&Config) -> Config) {
     let Some(base) = with_app(|app| app.cfg.clone()) else {
         return;
     };
-    let applied = config_from(&base, &toggles, &hw, &limits);
-    if let Some(on) = applied.autostart
+    config_applied(parent, build(&base));
+}
+
+/// Applies the switch or chip at `index` (only that field changes).
+fn apply_check(index: usize) {
+    let Some((parent, toggle, on)) = with_state(|s| {
+        let c = s.checks.get(index)?;
+        Some((s.parent, c.toggle.clone(), is_checked(c.hwnd)))
+    })
+    .flatten() else {
+        return;
+    };
+    let mut autostart = None;
+    commit(parent, |base| {
+        let applied = apply_toggle(base, &toggle, on);
+        autostart = applied.autostart;
+        applied.cfg
+    });
+    if let Some(on) = autostart
         && on != autostart::is_enabled()
     {
         let _ = if on {
@@ -507,12 +508,32 @@ fn apply() {
             autostart::disable()
         };
     }
-    // Show the clamped values the config actually took.
-    let values = [
-        applied.cfg.hw_interval_secs,
-        applied.cfg.limits_interval_secs,
-    ];
-    for ((edit, text), value) in edits.into_iter().zip([hw, limits]).zip(values) {
+}
+
+/// Applies the number fields and shows the clamped values the config took.
+fn apply_fields() {
+    let Some((parent, edits)) = with_state(|s| (s.parent, [s.hw_edit, s.limits_edit])) else {
+        return;
+    };
+    let texts = edits.map(window_text);
+    let Some(base) = with_app(|app| app.cfg.clone()) else {
+        return;
+    };
+    let cfg = apply_numbers(&base, &texts[0], &texts[1]);
+    if (cfg.hw_interval_secs, cfg.limits_interval_secs)
+        == (base.hw_interval_secs, base.limits_interval_secs)
+        && texts
+            .iter()
+            .zip([cfg.hw_interval_secs, cfg.limits_interval_secs])
+            .all(|(t, v)| t.trim() == v.to_string())
+    {
+        return;
+    }
+    for ((edit, text), value) in edits
+        .into_iter()
+        .zip(&texts)
+        .zip([cfg.hw_interval_secs, cfg.limits_interval_secs])
+    {
         if text.trim() != value.to_string() {
             let wide = wide_z(&value.to_string());
             // SAFETY: our own edit control; the EN_CHANGE it sends is ignored.
@@ -521,7 +542,7 @@ fn apply() {
             }
         }
     }
-    config_applied(parent, applied.cfg);
+    commit(parent, |_| cfg);
 }
 
 /// Opens the settings window, or focuses it if it is already open.
@@ -782,7 +803,7 @@ fn invalidate(hwnd: HWND) {
 }
 
 fn close(hwnd: HWND) {
-    apply();
+    apply_fields();
     // SAFETY: closing our own window.
     unsafe {
         let _ = DestroyWindow(hwnd);
@@ -834,14 +855,14 @@ extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM)
             let (id, code) = (wparam.0 & 0xffff, ((wparam.0 >> 16) & 0xffff) as u32);
             match (id, code) {
                 (ID_ESC, _) => close(hwnd),
-                (ID_ENTER, _) => apply(),
+                (ID_ENTER, _) => apply_fields(),
                 (ID_HW | ID_LIMITS, EN_KILLFOCUS) => {
-                    apply();
+                    apply_fields();
                     invalidate(hwnd);
                 }
                 (ID_HW | ID_LIMITS, EN_SETFOCUS) => invalidate(hwnd),
                 (i, BN_CLICKED) if i >= ID_CHECK => {
-                    apply();
+                    apply_check(i - ID_CHECK);
                     relayout();
                 }
                 (i, BN_SETFOCUS | BN_KILLFOCUS) if i >= ID_CHECK => invalidate(hwnd),

@@ -22,38 +22,36 @@ pub struct Applied {
     pub autostart: Option<bool>,
 }
 
-pub fn config_from(
-    base: &Config,
-    toggles: &[(Toggle, bool)],
-    hw_text: &str,
-    limits_text: &str,
-) -> Applied {
+/// The config after one switch or chip changed: only that field moves, so changes made
+/// elsewhere while the window is open (the keep-alive prompt, the strip menu) are kept.
+pub fn apply_toggle(base: &Config, toggle: &Toggle, on: bool) -> Applied {
     let mut cfg = base.clone();
     let mut autostart = None;
-    for (toggle, on) in toggles {
-        let on = *on;
-        match toggle {
-            Toggle::Claude => cfg.claude_enabled = on,
-            Toggle::Codex => cfg.codex_enabled = on,
-            Toggle::Item(id) => cfg.set_visible(id, on),
-            Toggle::Autostart => autostart = Some(on),
-            Toggle::KeepAliveClaude => {
-                cfg.keep_claude_login = on;
-                cfg.keepalive_asked = true;
-            }
-            Toggle::KeepAliveCodex => {
-                cfg.keep_codex_login = on;
-                cfg.codex_keepalive_asked = true;
-            }
+    match toggle {
+        Toggle::Claude => cfg.claude_enabled = on,
+        Toggle::Codex => cfg.codex_enabled = on,
+        Toggle::Item(id) => cfg.set_visible(id, on),
+        Toggle::Autostart => autostart = Some(on),
+        Toggle::KeepAliveClaude => {
+            cfg.keep_claude_login = on;
+            cfg.keepalive_asked = true;
+        }
+        Toggle::KeepAliveCodex => {
+            cfg.keep_codex_login = on;
+            cfg.codex_keepalive_asked = true;
         }
     }
+    Applied { cfg, autostart }
+}
+
+/// The config after the number fields were edited: only the intervals move, clamped; text
+/// that is not a number keeps the current value.
+pub fn apply_numbers(base: &Config, hw_text: &str, limits_text: &str) -> Config {
+    let mut cfg = base.clone();
     let number = |text: &str, fallback: u32| text.trim().parse().unwrap_or(fallback);
     cfg.hw_interval_secs = number(hw_text, cfg.hw_interval_secs);
     cfg.limits_interval_secs = number(limits_text, cfg.limits_interval_secs);
-    Applied {
-        cfg: cfg.clamped(),
-        autostart,
-    }
+    cfg.clamped()
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -76,29 +74,53 @@ mod tests {
     use super::*;
 
     #[test]
+    fn clicking_one_toggle_changes_only_that_field() {
+        // Changes made elsewhere while Settings is open (keep-alive prompt, strip menu) stay.
+        let base = Config {
+            keep_claude_login: true,
+            ..Config::default()
+        };
+        let a = apply_toggle(&base, &Toggle::Item(ItemId::Gpu), false);
+        assert!(!a.cfg.is_visible(&ItemId::Gpu));
+        assert!(a.cfg.keep_claude_login);
+        assert_eq!(a.autostart, None);
+        let a = apply_toggle(&base, &Toggle::Autostart, true);
+        assert_eq!((a.cfg, a.autostart), (base.clone(), Some(true)));
+    }
+
+    #[test]
+    fn keep_alive_toggle_marks_only_its_own_prompt_as_answered() {
+        let a = apply_toggle(&Config::default(), &Toggle::KeepAliveCodex, true);
+        assert!(a.cfg.keep_codex_login && a.cfg.codex_keepalive_asked);
+        assert!(!a.cfg.keepalive_asked);
+    }
+
+    #[test]
+    fn numbers_apply_without_touching_toggles() {
+        let base = Config {
+            claude_enabled: false,
+            ..Config::default()
+        };
+        let cfg = apply_numbers(&base, "2", "300");
+        assert_eq!((cfg.hw_interval_secs, cfg.limits_interval_secs), (2, 300));
+        assert!(!cfg.claude_enabled && !cfg.keepalive_asked);
+    }
+
+    #[test]
     fn toggles_map_to_config_like_the_old_apply() {
         let base = Config::default();
-        let a = config_from(
-            &base,
-            &[
-                (Toggle::Claude, false),
-                (Toggle::KeepAliveCodex, true),
-                (Toggle::Item(ItemId::Gpu), false),
-                (Toggle::Autostart, true),
-            ],
-            "2",
-            "300",
+        assert!(
+            !apply_toggle(&base, &Toggle::Claude, false)
+                .cfg
+                .claude_enabled
         );
-        assert!(!a.cfg.claude_enabled);
-        assert!(a.cfg.keep_codex_login && a.cfg.codex_keepalive_asked);
-        assert!(!a.cfg.is_visible(&ItemId::Gpu));
+        let keep = apply_toggle(&base, &Toggle::KeepAliveCodex, true).cfg;
+        assert!(keep.keep_codex_login && keep.codex_keepalive_asked);
+        let gpu = apply_toggle(&base, &Toggle::Item(ItemId::Gpu), false).cfg;
+        assert!(!gpu.is_visible(&ItemId::Gpu));
         assert_eq!(
-            (
-                a.cfg.hw_interval_secs,
-                a.cfg.limits_interval_secs,
-                a.autostart
-            ),
-            (2, 300, Some(true))
+            apply_toggle(&base, &Toggle::Autostart, true).autostart,
+            Some(true)
         );
     }
 
@@ -110,7 +132,7 @@ mod tests {
             ..Config::default()
         };
         let f = |hw: &str, lim: &str| {
-            let c = config_from(&base, &[], hw, lim).cfg;
+            let c = apply_numbers(&base, hw, lim);
             (c.hw_interval_secs, c.limits_interval_secs)
         };
         assert_eq!(f("", ""), (3, 120));
