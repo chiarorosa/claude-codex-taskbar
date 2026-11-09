@@ -4,6 +4,7 @@ pub mod claude;
 pub mod codex;
 pub mod http;
 pub mod keepalive;
+pub mod notify;
 pub mod reset;
 pub mod state;
 pub mod terminal;
