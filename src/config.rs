@@ -29,7 +29,7 @@ pub struct Config {
     /// Opt-in: run `codex login status` when the Codex login has expired.
     pub keep_codex_login: bool,
     pub codex_keepalive_asked: bool,
-    /// Opt-in notification delivery; the UI is a separate slice of #15.
+    /// Opt-in notification delivery when subscription usage crosses a threshold (#15).
     pub notify_near_limit: bool,
     /// Percent-used thresholds, normalized to unique ascending values in 1..=100.
     pub notify_thresholds: Vec<u32>,

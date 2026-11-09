@@ -110,9 +110,14 @@ fn old_callbacks_cannot_remove_a_replacement_balloon() {
     let (old, first) = life.begin();
     assert_eq!(old, None);
     assert!(life.is_current(first));
+    assert!(!life.is_shown(first));
+    assert!(life.mark_shown(first));
+    assert!(life.is_shown(first));
     let (old, second) = life.begin();
     assert_eq!(old, Some(first));
     assert_ne!(first, second);
+    assert!(!life.mark_shown(first));
+    assert!(!life.is_shown(second));
     assert!(!life.finish(first));
     assert!(life.is_current(second));
     assert!(life.finish(second));
@@ -124,6 +129,7 @@ fn cancel_and_wrapped_ids_preserve_lifetime_invariants() {
     let mut life = BalloonLife {
         last: u16::MAX,
         active: None,
+        ..Default::default()
     };
     assert_eq!(life.begin(), (None, 1));
     assert_eq!(life.cancel(), Some(1));
@@ -131,4 +137,87 @@ fn cancel_and_wrapped_ids_preserve_lifetime_invariants() {
     assert!(!life.is_current(1));
     assert!(!life.finish(1));
     assert_eq!(life.begin(), (None, 2));
+}
+
+#[test]
+fn busy_delivery_is_discarded_without_replaying_consumed_crossings() {
+    let cfg = super::tests::enabled();
+    let mut policy = Notifications::default();
+    policy.observe(
+        &cfg,
+        Kind::Claude,
+        &super::tests::reading(70.0, 1_000_000),
+        1_000_000,
+    );
+    let batch = policy.observe(
+        &cfg,
+        Kind::Claude,
+        &super::tests::reading(97.0, 1_000_000),
+        1_000_000,
+    );
+    let body = balloon_text(Lang::En, &cfg, &batch).unwrap();
+    assert_eq!(
+        body,
+        "Claude Code 5h reached 95%\nClaude Code weekly reached 95%"
+    );
+    let shell = FakeNotificationSink {
+        blocked: true,
+        ..sink()
+    };
+    assert!(!send_balloon(&shell, 7, "Title", &body, || true));
+    assert_eq!(*shell.calls.borrow(), vec![]);
+    assert_eq!(*shell.removed.borrow(), [7]);
+    let later = policy.observe(
+        &cfg,
+        Kind::Claude,
+        &super::tests::reading(97.0, 1_000_001),
+        1_000_001,
+    );
+    assert_eq!(later, vec![]);
+    assert_eq!(balloon_text(Lang::En, &cfg, &later), None);
+}
+
+#[test]
+fn classified_result_batch_reaches_the_shell_once_with_only_fresh_data() {
+    let cfg = super::tests::enabled();
+    let mut policy = Notifications::default();
+    let now = 1_000_000;
+    let mut batch = Vec::new();
+    for kind in [Kind::Claude, Kind::Codex] {
+        let previous = super::tests::reading(70.0, now);
+        policy.observe(&cfg, kind, &previous, now);
+        let ProviderStatus::Ok { usage, .. } = super::tests::reading(97.0, now) else {
+            unreachable!()
+        };
+        let fallback = classify_limit_result(&previous, Ok((usage.clone(), true, now)), now);
+        assert_eq!(policy.observe(&cfg, kind, &fallback, now), vec![]);
+        let fresh = classify_limit_result(&previous, Ok((usage, false, now)), now);
+        batch.extend(policy.observe(&cfg, kind, &fresh, now));
+    }
+    let body = balloon_text(Lang::En, &cfg, &batch).unwrap();
+    assert_eq!(
+        body,
+        "Claude Code 5h reached 95%\nClaude Code weekly reached 95%\nCodex 5h reached 95%\nCodex weekly reached 95%"
+    );
+    let shell = sink();
+    assert!(send_balloon(
+        &shell,
+        7,
+        t(Lang::En, Key::NotifyTitle),
+        &body,
+        || true
+    ));
+    assert_eq!(
+        shell
+            .calls
+            .borrow()
+            .iter()
+            .filter(|&&op| op == BalloonCommand::Show)
+            .count(),
+        1
+    );
+    assert_eq!(
+        shell.payloads.borrow()[2],
+        (7, "CCT — Usage warning".into(), body)
+    );
 }

@@ -3,7 +3,7 @@ use crate::limits::{FetchError, ProviderUsage, WindowUsage};
 
 const NOW: i64 = 1_000_000;
 
-fn enabled() -> Config {
+pub(super) fn enabled() -> Config {
     Config {
         notify_near_limit: true,
         claude_enabled: true,
@@ -12,7 +12,7 @@ fn enabled() -> Config {
     }
 }
 
-fn reading(pct: f32, at: i64) -> ProviderStatus {
+pub(super) fn reading(pct: f32, at: i64) -> ProviderStatus {
     ProviderStatus::Ok {
         usage: ProviderUsage {
             five_hour: Some(WindowUsage {
@@ -265,4 +265,42 @@ fn utf16_buffers_are_terminated_and_do_not_split_surrogates() {
     assert_eq!(wide_array::<1>("hello"), [0]);
     assert_eq!(wide_array::<0>("hello"), [0u16; 0]);
     assert_eq!(wide_array::<4>(""), [0, 0, 0, 0]);
+}
+
+#[test]
+fn result_classification_preserves_fallback_and_error_semantics() {
+    let previous = reading(70.0, NOW);
+    let ProviderStatus::Ok { usage, .. } = reading(97.0, NOW) else {
+        unreachable!()
+    };
+    assert_eq!(
+        classify_limit_result(&previous, Ok((usage.clone(), false, NOW)), NOW + 1),
+        ProviderStatus::Ok {
+            usage: usage.clone(),
+            at: NOW
+        }
+    );
+    assert_eq!(
+        classify_limit_result(&previous, Ok((usage.clone(), true, NOW)), NOW + 1),
+        ProviderStatus::FromSession { usage, at: NOW }
+    );
+    assert_eq!(
+        classify_limit_result(&previous, Err(FetchError::Expired), NOW + 1),
+        ProviderStatus::Failed(FetchError::Expired)
+    );
+    let ProviderStatus::Ok { usage, .. } = previous.clone() else {
+        unreachable!()
+    };
+    assert_eq!(
+        classify_limit_result(
+            &previous,
+            Err(FetchError::Network("offline".into())),
+            NOW + 1
+        ),
+        ProviderStatus::Stale {
+            usage,
+            at: NOW,
+            err: FetchError::Network("offline".into())
+        }
+    );
 }

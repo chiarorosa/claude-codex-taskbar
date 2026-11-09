@@ -1,6 +1,7 @@
 //! Application state and wiring: config, sampler, limits worker and the strip window.
 
 use super::layout::{Layout, layout};
+use super::notifications::{Notice, Notifications};
 use super::render::{GAP, Renderer, SEP_W, to_px};
 use super::strip;
 use super::taskbar::{
@@ -15,7 +16,7 @@ use crate::limits::claude::ClaudeProvider;
 use crate::limits::codex::CodexProvider;
 use crate::limits::keepalive::{KeepAlive, Outcome, invitation_kinds, run_login_status};
 use crate::limits::reset::{reset_refresh_delay, status_resets};
-use crate::limits::state::{STALE_SECS, age_status, next_status};
+use crate::limits::state::{STALE_SECS, age_status};
 use crate::limits::worker::{Control, Fetcher, LimitResult, spawn_queued};
 use crate::limits::{Provider, ProviderStatus};
 use crate::model::{Kind, provider_name};
@@ -40,6 +41,8 @@ use windows::core::HSTRING;
 /// Strip offset from the taskbar's left edge, in DIPs.
 const MARGIN_DIP: f32 = 8.0;
 
+mod notifications;
+
 pub struct App {
     pub cfg: Config,
     pub cfg_path: PathBuf,
@@ -50,7 +53,7 @@ pub struct App {
     pub codex: ProviderStatus,
     pub control: Arc<Control>,
     renderer: Renderer,
-    taskbar: Option<TaskbarInfo>,
+    pub(super) taskbar: Option<TaskbarInfo>,
     icons: IconCache,
     items: Vec<ItemView>,
     layout: Option<Layout>,
@@ -59,6 +62,7 @@ pub struct App {
     inbox: Option<Receiver<LimitResult>>,
     keepalive_claude: KeepAlive,
     keepalive_codex: KeepAlive,
+    notifications: Notifications,
 }
 
 fn light_theme() -> bool {
@@ -79,7 +83,7 @@ fn light_theme() -> bool {
     status.is_ok() && data == 1
 }
 
-fn foreground_is_fullscreen(monitor: taskbar::Rect) -> bool {
+pub(super) fn foreground_is_fullscreen(monitor: taskbar::Rect) -> bool {
     // SAFETY: read-only shell and window queries; failures mean "not fullscreen".
     unsafe {
         let shell_busy = SHQueryUserNotificationState().is_ok_and(|state| {
@@ -141,6 +145,7 @@ impl App {
             inbox: None,
             keepalive_claude: KeepAlive::default(),
             keepalive_codex: KeepAlive::default(),
+            notifications: Notifications::default(),
             cfg,
             cfg_path,
         };
@@ -177,24 +182,6 @@ impl App {
 
     pub fn refresh_instances(&mut self) {
         self.sampler.refresh_instances();
-    }
-
-    pub fn on_limits(&mut self, r: LimitResult) {
-        let now = now_unix();
-        let status = match r.kind {
-            Kind::Claude => &mut self.claude,
-            Kind::Codex => &mut self.codex,
-            Kind::Hardware => return,
-        };
-        if *status == ProviderStatus::Disabled {
-            return;
-        }
-        *status = match r.result {
-            Ok((usage, true, at)) => ProviderStatus::FromSession { usage, at },
-            Ok((usage, false, at)) => next_status(status, Ok(usage), at),
-            Err(err) => next_status(status, Err(err), now),
-        };
-        self.keep_login_active(r.kind, now);
     }
 
     fn keepalive_of(&mut self, kind: Kind) -> Option<(bool, &ProviderStatus, &mut KeepAlive)> {
@@ -304,14 +291,15 @@ impl App {
     }
 
     /// Applies every limit result the worker has queued.
-    pub fn drain_limits(&mut self) {
+    pub fn drain_limits(&mut self) -> Vec<Notice> {
         let results: Vec<LimitResult> = match &self.inbox {
             Some(inbox) => inbox.try_iter().collect(),
-            None => return,
+            None => return Vec::new(),
         };
-        for result in results {
-            self.on_limits(result);
-        }
+        results
+            .into_iter()
+            .flat_map(|result| self.on_limits(result))
+            .collect()
     }
 
     /// Whether the next taskbar query should run the UI Automation icon lookup.

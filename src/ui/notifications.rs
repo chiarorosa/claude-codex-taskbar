@@ -1,16 +1,32 @@
 //! Optional quota alerts, independent of the native notification transport.
 
+pub mod shell;
+
 use crate::config::Config;
 use crate::i18n::{Key, Lang, fmt2, t};
-use crate::limits::ProviderStatus;
 use crate::limits::notify::{CrossingState, Event, LimitWindow, crossings};
-use crate::limits::state::{STALE_SECS, age_status};
+use crate::limits::state::{STALE_SECS, age_status, next_status};
+use crate::limits::{FetchError, ProviderStatus, ProviderUsage};
 use crate::model::{Kind, provider_name};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Notice {
     pub kind: Kind,
     pub event: Event,
+}
+
+/// Keeps successful session-log fallback separate from fresh endpoint/CLI readings.
+/// For example, Ok((usage, true, at)) remains FromSession and cannot notify.
+pub fn classify_limit_result(
+    previous: &ProviderStatus,
+    result: Result<(ProviderUsage, bool, i64), FetchError>,
+    now: i64,
+) -> ProviderStatus {
+    match result {
+        Ok((usage, true, at)) => ProviderStatus::FromSession { usage, at },
+        Ok((usage, false, at)) => next_status(previous, Ok(usage), at),
+        Err(err) => next_status(previous, Err(err), now),
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -136,12 +152,33 @@ pub fn send_balloon(
 pub struct BalloonLife {
     last: u16,
     active: Option<u16>,
+    shown: bool,
 }
 
 impl BalloonLife {
+    /// Current temporary icon, e.g. None after cancellation or a terminal callback.
+    pub fn active_id(&self) -> Option<u16> {
+        self.active
+    }
+
     pub fn begin(&mut self) -> (Option<u16>, u16) {
         self.last = self.last.wrapping_add(1).max(1);
+        self.shown = false;
         (self.active.replace(self.last), self.last)
+    }
+
+    /// Records the shell's SHOW confirmation only for the active icon.
+    pub fn mark_shown(&mut self, id: u16) -> bool {
+        if !self.is_current(id) {
+            return false;
+        }
+        self.shown = true;
+        true
+    }
+
+    /// Distinguishes an actual balloon from one discarded by the shell.
+    pub fn is_shown(&self, id: u16) -> bool {
+        self.is_current(id) && self.shown
     }
 
     pub fn is_current(&self, id: u16) -> bool {

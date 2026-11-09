@@ -46,6 +46,8 @@ const CMD_AUTOSTART: usize = 3;
 const CMD_EXIT: usize = 4;
 const CMD_COPY: usize = 5;
 
+mod notifications;
+
 thread_local! {
     static APP: RefCell<Option<App>> = const { RefCell::new(None) };
     static TIP_TEXT: RefCell<Vec<u16>> = const { RefCell::new(Vec::new()) };
@@ -199,21 +201,23 @@ fn arm_reset_timer(hwnd: HWND) {
 pub fn config_applied(hwnd: HWND, cfg: crate::config::Config) {
     let secs = cfg.hw_interval_secs;
     with_app(|app| app.apply_config(cfg));
+    notifications::cancel(hwnd);
     set_hw_timer(hwnd, secs.clamp(1, 5));
     render(hwnd);
 }
 
 extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    if let Some(result) = notifications::handle(hwnd, msg, wparam, lparam) {
+        return result;
+    }
     let taskbar_created = TASKBAR_CREATED.load(Ordering::Relaxed) as u32;
     match msg {
         WM_TIMER => {
             match wparam.0 {
                 TIMER_HW => {
-                    with_app(|app| {
-                        app.sample_hw();
-                        // Picks up results whose notification arrived while the app was busy.
-                        app.drain_limits();
-                    });
+                    with_app(|app| app.sample_hw());
+                    // Picks up results whose notification arrived while the app was busy.
+                    notifications::drain(hwnd);
                 }
                 TIMER_TOPMOST => {
                     with_app(|app| app.tick_icons());
@@ -234,7 +238,7 @@ extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM)
             LRESULT(0)
         }
         WM_APP_LIMITS => {
-            with_app(|app| app.drain_limits());
+            notifications::drain(hwnd);
             arm_reset_timer(hwnd);
             render(hwnd);
             LRESULT(0)
@@ -307,6 +311,7 @@ extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM)
             LRESULT(0)
         }
         _ if taskbar_created != 0 && msg == taskbar_created => {
+            notifications::cancel(hwnd);
             with_app(|app| app.invalidate_icons());
             render(hwnd);
             LRESULT(0)
