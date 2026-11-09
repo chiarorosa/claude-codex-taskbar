@@ -15,12 +15,14 @@ use super::strip::{config_applied, with_app};
 use super::view::setup_hints;
 use crate::autostart;
 use crate::config::Config;
+use crate::config::{LABEL_MAX, normalize_label};
 use crate::hw::DiskReading;
 use crate::i18n::{Key, Lang, fmt, t};
 use crate::limits::Provider;
+use crate::limits::switcher::store::Store;
 use crate::model::ItemId;
 use layout::{Block, Ink, Page, Px, Row};
-use model::{Toggle, Tone, apply_numbers, apply_toggle, status_line};
+use model::{Toggle, Tone, apply_labels, apply_numbers, apply_toggle, status_line};
 use paint::Painter;
 use palette::{Palette, palette, read_theme};
 use std::cell::RefCell;
@@ -34,8 +36,8 @@ use windows::Win32::Graphics::Gdi::{
 };
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::Controls::{
-    BST_CHECKED, BST_UNCHECKED, CDDS_PREPAINT, CDRF_SKIPDEFAULT, NM_CUSTOMDRAW, NMCUSTOMDRAW,
-    NMHDR, SetScrollInfo,
+    BST_CHECKED, BST_UNCHECKED, CDDS_PREPAINT, CDRF_SKIPDEFAULT, EM_SETLIMITTEXT, NM_CUSTOMDRAW,
+    NMCUSTOMDRAW, NMHDR, SetScrollInfo,
 };
 use windows::Win32::UI::HiDpi::{
     AdjustWindowRectExForDpi, GetDpiForWindow, GetSystemMetricsForDpi,
@@ -62,6 +64,8 @@ const ID_ENTER: usize = 1;
 const ID_ESC: usize = 2;
 const ID_HW: usize = 10;
 const ID_LIMITS: usize = 11;
+const ID_CLAUDE_LABEL: usize = 12;
+const ID_CODEX_LABEL: usize = 13;
 /// Switches and chips get ids from here, in `State::checks` order.
 const ID_CHECK: usize = 100;
 
@@ -92,6 +96,11 @@ struct Facts {
     codex_login: bool,
     /// Under the notification switch: the configured thresholds.
     notify_sub: String,
+    /// The saved account holding the live Claude login; its label lives in the account
+    /// index instead of the config (#74).
+    claude_slot: Option<u32>,
+    /// The Claude label as last saved, to write the index only when it changes.
+    claude_label: String,
 }
 
 struct State {
@@ -99,8 +108,8 @@ struct State {
     parent: HWND,
     facts: Facts,
     checks: Vec<Check>,
-    hw_edit: HWND,
-    limits_edit: HWND,
+    /// Text fields as (id, control): the two intervals, then the two labels.
+    edits: [(usize, HWND); 4],
     dpi: u32,
     light: bool,
     pal: Palette,
@@ -240,6 +249,8 @@ struct ProviderCard {
     login: bool,
     missing: Key,
     keep_sub: Key,
+    label_id: usize,
+    label_sub: Key,
 }
 
 /// The page model from the facts and the current check states.
@@ -279,6 +290,11 @@ fn blocks(facts: &Facts, checks: &[(Toggle, String, bool)], light: bool) -> Vec<
                 indent: true,
                 state_text: state(&p.keep),
             },
+            Row::Number {
+                id: p.label_id,
+                title: t(lang, Key::SettingsLabel).to_string(),
+                sub: t(lang, p.label_sub).to_string(),
+            },
         ])
     };
     let chips = |limits: bool| {
@@ -303,6 +319,12 @@ fn blocks(facts: &Facts, checks: &[(Toggle, String, bool)], light: bool) -> Vec<
         login: facts.claude_login,
         missing: Key::ClaudeNoLogin,
         keep_sub: Key::KeepAliveSubClaude,
+        label_id: ID_CLAUDE_LABEL,
+        label_sub: if facts.claude_slot.is_some() {
+            Key::SettingsLabelSubAccount
+        } else {
+            Key::SettingsLabelSub
+        },
     }));
     out.push(provider(ProviderCard {
         toggle: Toggle::Codex,
@@ -312,6 +334,8 @@ fn blocks(facts: &Facts, checks: &[(Toggle, String, bool)], light: bool) -> Vec<
         login: facts.codex_login,
         missing: Key::CodexNoLogin,
         keep_sub: Key::KeepAliveSubCodex,
+        label_id: ID_CODEX_LABEL,
+        label_sub: Key::SettingsLabelSub,
     }));
     out.push(Block::Caption(t(lang, Key::SettingsItems).to_string()));
     out.push(Block::Card(vec![
@@ -451,7 +475,7 @@ fn place_children() {
             .collect();
         let inset = (8.0 * scale).round() as i32;
         let line = (18.0 * scale).round() as i32;
-        for (id, edit) in [(ID_HW, s.hw_edit), (ID_LIMITS, s.limits_edit)] {
+        for (id, edit) in s.edits {
             if let Some(r) = rect_of(id) {
                 let inner = Px {
                     x: r.x + inset,
@@ -607,7 +631,7 @@ fn redraw_children() {
         s.checks
             .iter()
             .map(|c| c.hwnd)
-            .chain([s.hw_edit, s.limits_edit])
+            .chain(s.edits.map(|(_, e)| e))
             .collect()
     })
     .unwrap_or_default();
@@ -674,39 +698,58 @@ fn apply_check(index: usize) {
     }
 }
 
-/// Applies the number fields and shows the clamped values the config took.
+/// Applies the interval and label fields and shows the values the config actually took.
 fn apply_fields() {
-    let Some((parent, edits)) = with_state(|s| (s.parent, [s.hw_edit, s.limits_edit])) else {
+    let Some((parent, edits, slot, saved_label)) = with_state(|s| {
+        (
+            s.parent,
+            s.edits,
+            s.facts.claude_slot,
+            s.facts.claude_label.clone(),
+        )
+    }) else {
         return;
     };
-    let texts = edits.map(window_text);
+    let texts = edits.map(|(_, e)| window_text(e));
     let Some(base) = with_app(|app| app.cfg.clone()) else {
         return;
     };
-    let cfg = apply_numbers(&base, &texts[0], &texts[1]);
-    if (cfg.hw_interval_secs, cfg.limits_interval_secs)
-        == (base.hw_interval_secs, base.limits_interval_secs)
-        && texts
-            .iter()
-            .zip([cfg.hw_interval_secs, cfg.limits_interval_secs])
-            .all(|(t, v)| t.trim() == v.to_string())
-    {
-        return;
-    }
-    for ((edit, text), value) in edits
-        .into_iter()
-        .zip(&texts)
-        .zip([cfg.hw_interval_secs, cfg.limits_interval_secs])
-    {
-        if text.trim() != value.to_string() {
-            let wide = wide_z(&value.to_string());
+    let numbers = apply_numbers(&base, &texts[0], &texts[1]);
+    let cfg = apply_labels(&numbers, &texts[2], &texts[3], slot.is_some());
+    let claude = normalize_label(&texts[2]);
+    // The live saved account keeps its own label in the account index (#74).
+    let slot_changed = match slot {
+        Some(id) if claude != saved_label => {
+            let saved = Store::new(Store::default_dir())
+                .set_label(id, &claude)
+                .is_ok();
+            with_state_mut(|s| s.facts.claude_label = claude.clone());
+            saved
+        }
+        _ => false,
+    };
+    let shown = [
+        cfg.hw_interval_secs.to_string(),
+        cfg.limits_interval_secs.to_string(),
+        if slot.is_some() {
+            claude
+        } else {
+            cfg.claude_label.clone()
+        },
+        cfg.codex_label.clone(),
+    ];
+    for (((_, edit), text), want) in edits.iter().zip(&texts).zip(&shown) {
+        if text != want {
+            let wide = wide_z(want);
             // SAFETY: our own edit control; the EN_CHANGE it sends is ignored.
             unsafe {
-                let _ = SetWindowTextW(edit, PCWSTR(wide.as_ptr()));
+                let _ = SetWindowTextW(*edit, PCWSTR(wide.as_ptr()));
             }
         }
     }
-    commit(parent, |_| cfg);
+    if cfg != base || slot_changed {
+        commit(parent, |_| cfg);
+    }
 }
 
 /// Opens the settings window, or focuses it if it is already open.
@@ -742,6 +785,8 @@ pub fn open(parent: HWND) {
                 .collect::<Vec<_>>()
                 .join(" · "),
         ),
+        claude_slot: super::switcher_ui::live_slot(),
+        claude_label: super::switcher_ui::live_claude_label(&cfg.claude_label),
     };
     let monitor = monitor.map(|m| Px {
         x: m.left,
@@ -836,13 +881,14 @@ fn create(parent: HWND, cfg: &Config, disks: &[DiskReading], facts: Facts, monit
                 hwnd: child,
             });
         }
-        let edit = |id: usize, value: u32| {
-            let text = wide_z(&value.to_string());
+        let edit = |id: usize, text: &str, number: bool| {
+            let text = wide_z(text);
+            let style = if number { ES_NUMBER as u32 } else { 0 };
             let child = CreateWindowExW(
                 Default::default(),
                 w!("EDIT"),
                 PCWSTR(text.as_ptr()),
-                WS_CHILD | WS_VISIBLE | WS_TABSTOP | WINDOW_STYLE(ES_NUMBER as u32),
+                WS_CHILD | WS_VISIBLE | WS_TABSTOP | WINDOW_STYLE(style),
                 0,
                 0,
                 1,
@@ -859,10 +905,26 @@ fn create(parent: HWND, cfg: &Config, disks: &[DiskReading], facts: Facts, monit
                 Some(WPARAM(font.0 as usize)),
                 Some(LPARAM(1)),
             );
+            if !number {
+                SendMessageW(child, EM_SETLIMITTEXT, Some(WPARAM(LABEL_MAX)), None);
+            }
             child
         };
-        let hw_edit = edit(ID_HW, cfg.hw_interval_secs);
-        let limits_edit = edit(ID_LIMITS, cfg.limits_interval_secs);
+        let edits = [
+            (ID_HW, edit(ID_HW, &cfg.hw_interval_secs.to_string(), true)),
+            (
+                ID_LIMITS,
+                edit(ID_LIMITS, &cfg.limits_interval_secs.to_string(), true),
+            ),
+            (
+                ID_CLAUDE_LABEL,
+                edit(ID_CLAUDE_LABEL, &facts.claude_label, false),
+            ),
+            (
+                ID_CODEX_LABEL,
+                edit(ID_CODEX_LABEL, &cfg.codex_label, false),
+            ),
+        ];
 
         STATE.with(|s| {
             *s.borrow_mut() = Some(State {
@@ -870,8 +932,7 @@ fn create(parent: HWND, cfg: &Config, disks: &[DiskReading], facts: Facts, monit
                 parent,
                 facts,
                 checks,
-                hw_edit,
-                limits_edit,
+                edits,
                 dpi,
                 light: theme.light,
                 pal,
@@ -952,7 +1013,7 @@ fn paint(hwnd: HWND) {
             let _ = s
                 .painter
                 .page(hdc, client, &page, &s.pal, focus_ring(s, &page));
-            for (id, edit) in [(ID_HW, s.hw_edit), (ID_LIMITS, s.limits_edit)] {
+            for (id, edit) in s.edits {
                 if let Some((_, r)) = page.controls.iter().find(|(i, _)| *i == id) {
                     let _ = s.painter.field(hdc, *r, focus == edit, &s.pal);
                 }
@@ -983,7 +1044,7 @@ fn dpi_changed(hwnd: HWND, dpi: u32, suggested: RECT) {
         let _ = s.painter.set_dpi(dpi);
         let old = s.edit_font;
         s.edit_font = edit_font(dpi);
-        (old, s.edit_font, [s.hw_edit, s.limits_edit])
+        (old, s.edit_font, s.edits.map(|(_, e)| e))
     });
     if let Some((old, font, edits)) = fonts {
         // SAFETY: our own edits take the new font before the old one is freed.
@@ -1017,11 +1078,11 @@ extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM)
             match (id, code) {
                 (ID_ESC, _) => close(hwnd),
                 (ID_ENTER, _) => apply_fields(),
-                (ID_HW | ID_LIMITS, EN_KILLFOCUS) => {
+                (ID_HW | ID_LIMITS | ID_CLAUDE_LABEL | ID_CODEX_LABEL, EN_KILLFOCUS) => {
                     apply_fields();
                     invalidate(hwnd);
                 }
-                (ID_HW | ID_LIMITS, EN_SETFOCUS) => {
+                (ID_HW | ID_LIMITS | ID_CLAUDE_LABEL | ID_CODEX_LABEL, EN_SETFOCUS) => {
                     reveal_control(id);
                     invalidate(hwnd);
                 }
