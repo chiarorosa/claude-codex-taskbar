@@ -13,6 +13,8 @@ pub enum Toggle {
     Autostart,
     KeepAliveClaude,
     KeepAliveCodex,
+    /// Windows balloon when a limit crosses a threshold (#15).
+    NotifyNearLimit,
 }
 
 /// The config to apply, and the autostart switch when the window has one.
@@ -32,6 +34,7 @@ pub fn apply_toggle(base: &Config, toggle: &Toggle, on: bool) -> Applied {
         Toggle::Codex => cfg.codex_enabled = on,
         Toggle::Item(id) => cfg.set_visible(id, on),
         Toggle::Autostart => autostart = Some(on),
+        Toggle::NotifyNearLimit => cfg.notify_near_limit = on,
         Toggle::KeepAliveClaude => {
             cfg.keep_claude_login = on;
             cfg.keepalive_asked = true;
@@ -86,6 +89,31 @@ mod tests {
         assert_eq!(a.autostart, None);
         let a = apply_toggle(&base, &Toggle::Autostart, true);
         assert_eq!((a.cfg, a.autostart), (base.clone(), Some(true)));
+    }
+
+    #[test]
+    fn notify_toggle_changes_only_the_opt_in_and_keeps_thresholds() {
+        let base = Config {
+            notify_thresholds: vec![75, 90],
+            hw_interval_secs: 3,
+            ..Config::default()
+        };
+        let a = apply_toggle(&base, &Toggle::NotifyNearLimit, true);
+        assert_eq!(
+            (a.cfg, a.autostart),
+            (
+                Config {
+                    notify_near_limit: true,
+                    ..base.clone()
+                },
+                None
+            )
+        );
+        assert!(
+            !apply_toggle(&base, &Toggle::NotifyNearLimit, false)
+                .cfg
+                .notify_near_limit
+        );
     }
 
     #[test]

@@ -87,6 +87,7 @@ pub enum Key {
     SettingsLimitsInterval,
     SettingsWeekSuffix,
     NotifyNearLimit,
+    NotifyNearLimitSub,
     NotifyTitle,
     NotifyFiveHour,
     KeepAlivePromptBody,
@@ -171,6 +172,7 @@ impl Key {
         Key::SettingsLimitsInterval,
         Key::SettingsWeekSuffix,
         Key::NotifyNearLimit,
+        Key::NotifyNearLimitSub,
         Key::NotifyTitle,
         Key::NotifyFiveHour,
         Key::KeepAlivePromptBody,
@@ -289,6 +291,10 @@ pub fn t(lang: Lang, key: Key) -> &'static str {
         Key::SettingsLimitsInterval => ("Limits refresh", "Atualização dos limites"),
         Key::SettingsWeekSuffix => ("weekly", "semanal"),
         Key::NotifyNearLimit => ("Notify near limit", "Avisar ao se aproximar do limite"),
+        Key::NotifyNearLimitSub => (
+            "Windows notification at {} of a limit",
+            "Notificação do Windows ao chegar a {} de um limite",
+        ),
         Key::NotifyTitle => ("CCT — Usage limits", "CCT — Limites de uso"),
         Key::NotifyFiveHour => ("5h", "5h"),
         Key::KeepAlivePromptBody => (

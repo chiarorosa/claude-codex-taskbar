@@ -16,7 +16,7 @@ use super::view::setup_hints;
 use crate::autostart;
 use crate::config::Config;
 use crate::hw::DiskReading;
-use crate::i18n::{Key, Lang, t};
+use crate::i18n::{Key, Lang, fmt, t};
 use crate::limits::Provider;
 use crate::model::ItemId;
 use layout::{Block, Ink, Page, Px, Row};
@@ -90,6 +90,8 @@ struct Facts {
     hints: Vec<Key>,
     claude_login: bool,
     codex_login: bool,
+    /// Under the notification switch: the configured thresholds.
+    notify_sub: String,
 }
 
 struct State {
@@ -211,6 +213,12 @@ fn check_specs(
         Look::Switch,
         autostart::is_enabled(),
     ));
+    specs.push((
+        Toggle::NotifyNearLimit,
+        t(lang, Key::NotifyNearLimit).to_string(),
+        Look::Switch,
+        cfg.notify_near_limit,
+    ));
     specs
 }
 
@@ -325,6 +333,14 @@ fn blocks(facts: &Facts, checks: &[(Toggle, String, bool)], light: bool) -> Vec<
             tile: None,
             indent: false,
             state_text: state(&Toggle::Autostart),
+        },
+        Row::Switch {
+            id: id_of(&Toggle::NotifyNearLimit),
+            title: t(lang, Key::NotifyNearLimit).to_string(),
+            sub: Some((facts.notify_sub.clone(), Ink::Sub)),
+            tile: None,
+            indent: false,
+            state_text: state(&Toggle::NotifyNearLimit),
         },
         Row::Number {
             id: ID_HW,
@@ -718,6 +734,14 @@ pub fn open(parent: HWND) {
         hints: setup_hints(taskbar),
         claude_login: claude_provider().has_login(),
         codex_login: codex_provider().has_login(),
+        notify_sub: fmt(
+            t(lang, Key::NotifyNearLimitSub),
+            &cfg.notify_thresholds
+                .iter()
+                .map(|p| format!("{p}%"))
+                .collect::<Vec<_>>()
+                .join(" · "),
+        ),
     };
     let monitor = monitor.map(|m| Px {
         x: m.left,
