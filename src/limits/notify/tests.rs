@@ -284,3 +284,88 @@ fn non_finite_percentages_do_not_poison_history() {
         );
     }
 }
+
+#[test]
+fn reset_jitter_preserves_real_crossings_without_repeating_alerts() {
+    let mut prev = baseline(70.0, 70.0, 1000);
+    for (shift, pct, peak, thresholds) in [
+        (1, 80.0, 80.0, vec![80]),
+        (-1, 95.0, 95.0, vec![95]),
+        (0, 97.0, 97.0, vec![]),
+        (1, 70.0, 97.0, vec![]),
+        (-1, 97.0, 97.0, vec![]),
+    ] {
+        let (next, events) = crossings(&prev, &sample(pct, pct, 1000 + shift), &THRESHOLDS);
+        let expected: Vec<_> = [LimitWindow::FiveHour, LimitWindow::Weekly]
+            .into_iter()
+            .flat_map(|w| thresholds.iter().map(move |&t| event(w, t)))
+            .collect();
+        assert_eq!(events, expected, "{shift:+}s at {pct}%");
+        assert_eq!(next.five_hour, window(peak, Some(1000 + shift)));
+        assert_eq!(next.weekly, window(peak, Some(2000 + shift)));
+        prev = next;
+    }
+}
+
+#[test]
+fn only_forward_resets_beyond_sixty_seconds_rearm_thresholds() {
+    let prev = baseline(97.0, 97.0, 1000);
+    for (shift, rearmed) in [
+        (-100, false),
+        (-61, false),
+        (-60, false),
+        (-1, false),
+        (0, false),
+        (1, false),
+        (59, false),
+        (60, false),
+        (61, true),
+        (100, true),
+    ] {
+        let (next, events) = crossings(&prev, &sample(97.0, 97.0, 1000 + shift), &THRESHOLDS);
+        let expected = if rearmed {
+            vec![
+                event(LimitWindow::FiveHour, 80),
+                event(LimitWindow::FiveHour, 95),
+                event(LimitWindow::Weekly, 80),
+                event(LimitWindow::Weekly, 95),
+            ]
+        } else {
+            vec![]
+        };
+        assert_eq!(events, expected, "reset shift {shift:+}s");
+        assert_eq!(
+            crossings(&next, &sample(97.0, 97.0, 1000 + shift), &THRESHOLDS).1,
+            vec![]
+        );
+    }
+}
+
+#[test]
+fn reset_tolerance_handles_timestamp_extremes_without_overflow() {
+    for (old, new, rearmed) in [
+        (i64::MIN, i64::MAX, true),
+        (i64::MAX, i64::MIN, false),
+        (i64::MAX - 61, i64::MAX, true),
+        (i64::MAX - 60, i64::MAX, false),
+        (i64::MIN, i64::MIN + 60, false),
+        (i64::MIN, i64::MIN + 61, true),
+        (i64::MAX, i64::MAX, false),
+    ] {
+        let (prev, _) = crossings(
+            &CrossingState::default(),
+            &ok(window(97.0, Some(old)), None),
+            &THRESHOLDS,
+        );
+        let (_, events) = crossings(&prev, &ok(window(97.0, Some(new)), None), &THRESHOLDS);
+        let expected = if rearmed {
+            vec![
+                event(LimitWindow::FiveHour, 80),
+                event(LimitWindow::FiveHour, 95),
+            ]
+        } else {
+            vec![]
+        };
+        assert_eq!(events, expected, "{old} -> {new}");
+    }
+}

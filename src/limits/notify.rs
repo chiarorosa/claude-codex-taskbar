@@ -73,7 +73,9 @@ fn advance_window(
         return None;
     };
     // Missing reset metadata cannot prove that a quota window rolled over (#15).
-    let reset = matches!((prev.resets_at, curr.resets_at), (Some(a), Some(b)) if a != b);
+    // Providers' estimated/rounded timestamps can drift between polls (PR #73).
+    let reset =
+        matches!((prev.resets_at, curr.resets_at), (Some(a), Some(b)) if b.saturating_sub(a) > 60);
     let before = if reset { 0.0 } else { prev.used_pct };
     *prev = WindowUsage {
         // Keep the peak so dips cannot rearm a threshold in the same window.
