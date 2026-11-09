@@ -28,25 +28,32 @@ use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows::Win32::Graphics::Dwm::{DWMWA_USE_IMMERSIVE_DARK_MODE, DwmSetWindowAttribute};
 use windows::Win32::Graphics::Gdi::{
     BeginPaint, CLEARTYPE_QUALITY, CLIP_DEFAULT_PRECIS, CreateFontW, CreateSolidBrush,
-    DEFAULT_CHARSET, DeleteObject, EndPaint, FF_DONTCARE, FW_NORMAL, HBRUSH, HDC, HFONT, HGDIOBJ,
-    InvalidateRect, OUT_DEFAULT_PRECIS, PAINTSTRUCT, SetBkColor, SetTextColor,
+    DEFAULT_CHARSET, DeleteObject, EndPaint, FF_DONTCARE, FW_NORMAL, GetMonitorInfoW, HBRUSH, HDC,
+    HFONT, HGDIOBJ, InvalidateRect, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromWindow,
+    OUT_DEFAULT_PRECIS, PAINTSTRUCT, SetBkColor, SetTextColor,
 };
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::Controls::{
-    BST_CHECKED, BST_UNCHECKED, CDDS_PREPAINT, CDRF_SKIPDEFAULT, NM_CUSTOMDRAW, NMCUSTOMDRAW, NMHDR,
+    BST_CHECKED, BST_UNCHECKED, CDDS_PREPAINT, CDRF_SKIPDEFAULT, NM_CUSTOMDRAW, NMCUSTOMDRAW,
+    NMHDR, SetScrollInfo,
 };
-use windows::Win32::UI::HiDpi::{AdjustWindowRectExForDpi, GetDpiForWindow};
+use windows::Win32::UI::HiDpi::{
+    AdjustWindowRectExForDpi, GetDpiForWindow, GetSystemMetricsForDpi,
+};
 use windows::Win32::UI::Input::KeyboardAndMouse::GetFocus;
 use windows::Win32::UI::WindowsAndMessaging::{
     BM_GETCHECK, BM_SETCHECK, BN_CLICKED, BN_KILLFOCUS, BN_SETFOCUS, BS_AUTOCHECKBOX, BS_NOTIFY,
     CreateWindowExW, DefWindowProcW, DestroyWindow, EN_KILLFOCUS, EN_SETFOCUS, ES_NUMBER,
-    GetSystemMetrics, GetWindowTextW, HMENU, IDC_ARROW, IsDialogMessageW, LoadCursorW, MSG,
-    MoveWindow, RegisterClassExW, SM_CXSCREEN, SM_CYSCREEN, SW_SHOW, SWP_NOACTIVATE, SWP_NOZORDER,
-    SendMessageW, SetForegroundWindow, SetWindowPos, SetWindowTextW, ShowWindow, UISF_HIDEFOCUS,
-    WINDOW_EX_STYLE, WINDOW_STYLE, WM_CLOSE, WM_COMMAND, WM_CTLCOLOREDIT, WM_DESTROY,
-    WM_DPICHANGED, WM_ERASEBKGND, WM_NOTIFY, WM_PAINT, WM_QUERYUISTATE, WM_SETFONT,
-    WM_SETTINGCHANGE, WM_SYSCOLORCHANGE, WM_UPDATEUISTATE, WNDCLASSEXW, WS_CAPTION, WS_CHILD,
-    WS_CLIPCHILDREN, WS_EX_CONTROLPARENT, WS_OVERLAPPED, WS_SYSMENU, WS_TABSTOP, WS_VISIBLE,
+    GetClientRect, GetScrollInfo, GetSystemMetrics, GetWindowTextW, HMENU, IDC_ARROW,
+    IsDialogMessageW, LoadCursorW, MSG, MoveWindow, RegisterClassExW, SB_BOTTOM, SB_LINEDOWN,
+    SB_LINEUP, SB_PAGEDOWN, SB_PAGEUP, SB_THUMBPOSITION, SB_THUMBTRACK, SB_TOP, SB_VERT,
+    SCROLLINFO, SIF_PAGE, SIF_POS, SIF_RANGE, SIF_TRACKPOS, SM_CXSCREEN, SM_CXVSCROLL, SM_CYSCREEN,
+    SW_SHOW, SWP_NOACTIVATE, SWP_NOZORDER, SendMessageW, SetForegroundWindow, SetWindowPos,
+    SetWindowTextW, ShowWindow, UISF_HIDEFOCUS, WINDOW_EX_STYLE, WINDOW_STYLE, WM_CLOSE,
+    WM_COMMAND, WM_CTLCOLOREDIT, WM_DESTROY, WM_DPICHANGED, WM_ERASEBKGND, WM_MOUSEWHEEL,
+    WM_NOTIFY, WM_PAINT, WM_QUERYUISTATE, WM_SETFONT, WM_SETTINGCHANGE, WM_SIZE, WM_SYSCOLORCHANGE,
+    WM_UPDATEUISTATE, WM_VSCROLL, WNDCLASSEXW, WS_CAPTION, WS_CHILD, WS_CLIPCHILDREN,
+    WS_EX_CONTROLPARENT, WS_OVERLAPPED, WS_SYSMENU, WS_TABSTOP, WS_VISIBLE, WS_VSCROLL,
 };
 use windows::core::{BOOL, PCWSTR, w};
 
@@ -58,7 +65,10 @@ const ID_LIMITS: usize = 11;
 /// Switches and chips get ids from here, in `State::checks` order.
 const ID_CHECK: usize = 100;
 
-const STYLE: WINDOW_STYLE = WINDOW_STYLE(WS_OVERLAPPED.0 | WS_CAPTION.0 | WS_SYSMENU.0);
+const STYLE: WINDOW_STYLE =
+    WINDOW_STYLE(WS_OVERLAPPED.0 | WS_CAPTION.0 | WS_SYSMENU.0 | WS_VSCROLL.0);
+/// Scroll step for a wheel notch or an arrow click, in DIPs.
+const SCROLL_LINE: f32 = 40.0;
 const EX_STYLE: WINDOW_EX_STYLE = WS_EX_CONTROLPARENT;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -96,6 +106,8 @@ struct State {
     page: Page,
     edit_font: HFONT,
     field_brush: HBRUSH,
+    /// Vertical scroll offset in pixels, when the page is taller than the work area.
+    scroll: i32,
 }
 
 thread_local! {
@@ -393,17 +405,27 @@ fn relayout() {
     }) else {
         return;
     };
-    let placed = with_state_mut(|s| {
+    with_state_mut(|s| {
         let model = blocks(&s.facts, &specs, s.light);
         let title = t(s.facts.lang, Key::SettingsPageTitle);
+        s.page = layout::layout(title, &model, s.dpi as f32 / 96.0, &s.painter);
+    });
+    place_children();
+}
+
+/// Moves every control to its rect on the page, minus the scroll offset.
+fn place_children() {
+    let placed = with_state(|s| {
         let scale = s.dpi as f32 / 96.0;
-        s.page = layout::layout(title, &model, scale, &s.painter);
         let rect_of = |id: usize| {
             s.page
                 .controls
                 .iter()
                 .find(|(i, _)| *i == id)
-                .map(|(_, r)| *r)
+                .map(|(_, r)| Px {
+                    y: r.y - s.scroll,
+                    ..*r
+                })
         };
         let mut moves: Vec<(HWND, Px)> = s
             .checks
@@ -436,6 +458,132 @@ fn relayout() {
         }
         let _ = InvalidateRect(Some(hwnd), None, false);
     }
+}
+
+fn client_height(hwnd: HWND) -> i32 {
+    let mut rect = RECT::default();
+    // SAFETY: rect is a valid out-pointer for our own window.
+    unsafe {
+        let _ = GetClientRect(hwnd, &mut rect);
+    }
+    rect.bottom - rect.top
+}
+
+/// Syncs the scroll bar with the page and the client height; the bar hides when all fits.
+fn update_scroll() {
+    let Some((hwnd, content, offset)) = with_state(|s| (s.hwnd, s.page.height, s.scroll)) else {
+        return;
+    };
+    let view = client_height(hwnd);
+    let offset = layout::clamp_scroll(offset, content, view);
+    let info = SCROLLINFO {
+        cbSize: size_of::<SCROLLINFO>() as u32,
+        fMask: SIF_RANGE | SIF_PAGE | SIF_POS,
+        nMin: 0,
+        nMax: content - 1,
+        nPage: view.max(0) as u32,
+        nPos: offset,
+        nTrackPos: 0,
+    };
+    // SAFETY: valid SCROLLINFO for our own window.
+    unsafe {
+        SetScrollInfo(hwnd, SB_VERT, &info, true);
+    }
+    scroll_to(offset);
+}
+
+/// Scrolls the page to `offset` (clamped) and moves the controls with it.
+fn scroll_to(offset: i32) {
+    let changed = with_state_mut(|s| {
+        let offset = layout::clamp_scroll(offset, s.page.height, client_height(s.hwnd));
+        let changed = offset != s.scroll;
+        s.scroll = offset;
+        (changed, s.hwnd, offset)
+    });
+    if let Some((true, hwnd, offset)) = changed {
+        let info = SCROLLINFO {
+            cbSize: size_of::<SCROLLINFO>() as u32,
+            fMask: SIF_POS,
+            nPos: offset,
+            ..Default::default()
+        };
+        // SAFETY: valid SCROLLINFO for our own window.
+        unsafe {
+            SetScrollInfo(hwnd, SB_VERT, &info, true);
+        }
+        place_children();
+    }
+}
+
+fn scroll_by(delta: i32) {
+    if let Some(offset) = with_state(|s| s.scroll) {
+        scroll_to(offset + delta);
+    }
+}
+
+/// Scrolls just enough to show the control with `id` (keyboard focus moved to it).
+fn reveal_control(id: usize) {
+    let target = with_state(|s| {
+        let r = s.page.controls.iter().find(|(i, _)| *i == id)?.1;
+        let margin = (8.0 * s.dpi as f32 / 96.0).round() as i32;
+        Some(layout::reveal(s.scroll, r, client_height(s.hwnd), margin))
+    })
+    .flatten();
+    if let Some(offset) = target {
+        scroll_to(offset);
+    }
+}
+
+fn line_px() -> i32 {
+    with_state(|s| (SCROLL_LINE * s.dpi as f32 / 96.0).round() as i32).unwrap_or(40)
+}
+
+/// Work area of the monitor the window is on.
+fn work_area(hwnd: HWND) -> Option<Px> {
+    let mut mi = MONITORINFO {
+        cbSize: size_of::<MONITORINFO>() as u32,
+        ..Default::default()
+    };
+    // SAFETY: mi is sized for GetMonitorInfoW; the monitor handle comes from our window.
+    let ok = unsafe {
+        GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &mut mi).as_bool()
+    };
+    let r = mi.rcWork;
+    ok.then_some(Px {
+        x: r.left,
+        y: r.top,
+        w: r.right - r.left,
+        h: r.bottom - r.top,
+    })
+}
+
+/// Sizes and places the window inside the work area, with room for the scroll bar when the
+/// page does not fit, then syncs the bar. `anchor` keeps the left/top Windows suggested.
+fn place_window(hwnd: HWND, dpi: u32, fallback: Px, anchor: Option<(i32, i32)>) {
+    let work = work_area(hwnd).unwrap_or(fallback);
+    let mut size = window_size(page_size(), dpi);
+    if size.1 > work.h {
+        // SAFETY: plain metric query.
+        size.0 += unsafe { GetSystemMetricsForDpi(SM_CXVSCROLL, dpi) };
+    }
+    let mut r = layout::fit(work, size);
+    if let Some((x, y)) = anchor {
+        r.x = x;
+        r.y = y.min(work.y + work.h - r.h).max(work.y);
+    }
+    // SAFETY: resizing our own window.
+    unsafe {
+        let _ = SetWindowPos(
+            hwnd,
+            None,
+            r.x,
+            r.y,
+            r.w,
+            r.h,
+            SWP_NOZORDER | SWP_NOACTIVATE,
+        );
+    }
+    update_scroll();
 }
 
 fn redraw_children() {
@@ -707,21 +855,12 @@ fn create(parent: HWND, cfg: &Config, disks: &[DiskReading], facts: Facts, monit
                 page: Page::default(),
                 edit_font: font,
                 field_brush: CreateSolidBrush(colorref(pal.field)),
+                scroll: 0,
             })
         });
         relayout();
 
-        let size = window_size(page_size(), dpi);
-        let (x, y) = layout::center_on(monitor, primary, size);
-        let _ = SetWindowPos(
-            hwnd,
-            None,
-            x,
-            y,
-            size.0,
-            size.1,
-            SWP_NOZORDER | SWP_NOACTIVATE,
-        );
+        place_window(hwnd, dpi, monitor.unwrap_or(primary), None);
         let _ = ShowWindow(hwnd, SW_SHOW);
         let _ = SetForegroundWindow(hwnd);
     }
@@ -752,7 +891,7 @@ fn custom_draw(cd: &NMCUSTOMDRAW) -> Option<LRESULT> {
 
 /// The focused switch or chip, when keyboard cues are showing. Fields show focus with their
 /// accent underline instead.
-fn focus_ring(s: &State) -> Option<Px> {
+fn focus_ring(s: &State, page: &Page) -> Option<Px> {
     // SAFETY: plain queries on our own window.
     let (focus, ui) = unsafe {
         (
@@ -764,8 +903,7 @@ fn focus_ring(s: &State) -> Option<Px> {
         return None;
     }
     let i = s.checks.iter().position(|c| c.hwnd == focus)?;
-    s.page
-        .controls
+    page.controls
         .iter()
         .find(|(id, _)| *id == ID_CHECK + i)
         .map(|(_, r)| *r)
@@ -778,15 +916,20 @@ fn paint(hwnd: HWND) {
         let hdc: HDC = BeginPaint(hwnd, &mut ps);
         let focus = GetFocus();
         with_state(|s| {
+            let mut rect = RECT::default();
+            let _ = GetClientRect(hwnd, &mut rect);
             let client = Px {
                 x: 0,
                 y: 0,
-                w: s.page.width,
-                h: s.page.height,
+                w: rect.right,
+                h: rect.bottom,
             };
-            let _ = s.painter.page(hdc, client, &s.page, &s.pal, focus_ring(s));
+            let page = s.page.shifted(-s.scroll);
+            let _ = s
+                .painter
+                .page(hdc, client, &page, &s.pal, focus_ring(s, &page));
             for (id, edit) in [(ID_HW, s.hw_edit), (ID_LIMITS, s.limits_edit)] {
-                if let Some((_, r)) = s.page.controls.iter().find(|(i, _)| *i == id) {
+                if let Some((_, r)) = page.controls.iter().find(|(i, _)| *i == id) {
                     let _ = s.painter.field(hdc, *r, focus == edit, &s.pal);
                 }
             }
@@ -833,19 +976,13 @@ fn dpi_changed(hwnd: HWND, dpi: u32, suggested: RECT) {
         }
     }
     relayout();
-    let size = window_size(page_size(), dpi);
-    // SAFETY: resizing our own window at the position Windows suggested.
-    unsafe {
-        let _ = SetWindowPos(
-            hwnd,
-            None,
-            suggested.left,
-            suggested.top,
-            size.0,
-            size.1,
-            SWP_NOZORDER | SWP_NOACTIVATE,
-        );
-    }
+    let fallback = Px {
+        x: suggested.left,
+        y: suggested.top,
+        w: suggested.right - suggested.left,
+        h: suggested.bottom - suggested.top,
+    };
+    place_window(hwnd, dpi, fallback, Some((suggested.left, suggested.top)));
     redraw_children();
 }
 
@@ -860,12 +997,19 @@ extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM)
                     apply_fields();
                     invalidate(hwnd);
                 }
-                (ID_HW | ID_LIMITS, EN_SETFOCUS) => invalidate(hwnd),
+                (ID_HW | ID_LIMITS, EN_SETFOCUS) => {
+                    reveal_control(id);
+                    invalidate(hwnd);
+                }
                 (i, BN_CLICKED) if i >= ID_CHECK => {
                     apply_check(i - ID_CHECK);
                     relayout();
                 }
-                (i, BN_SETFOCUS | BN_KILLFOCUS) if i >= ID_CHECK => invalidate(hwnd),
+                (i, BN_SETFOCUS) if i >= ID_CHECK => {
+                    reveal_control(i);
+                    invalidate(hwnd);
+                }
+                (i, BN_KILLFOCUS) if i >= ID_CHECK => invalidate(hwnd),
                 _ => {}
             }
             LRESULT(0)
@@ -895,6 +1039,40 @@ extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM)
             })
             // SAFETY: default handling when the state is busy.
             .unwrap_or_else(|| unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) })
+        }
+        WM_VSCROLL => {
+            let view = client_height(hwnd);
+            let line = line_px();
+            match (wparam.0 & 0xffff) as i32 {
+                c if c == SB_LINEUP.0 => scroll_by(-line),
+                c if c == SB_LINEDOWN.0 => scroll_by(line),
+                c if c == SB_PAGEUP.0 => scroll_by(-view),
+                c if c == SB_PAGEDOWN.0 => scroll_by(view),
+                c if c == SB_TOP.0 => scroll_to(0),
+                c if c == SB_BOTTOM.0 => scroll_to(i32::MAX),
+                c if c == SB_THUMBTRACK.0 || c == SB_THUMBPOSITION.0 => {
+                    let mut info = SCROLLINFO {
+                        cbSize: size_of::<SCROLLINFO>() as u32,
+                        fMask: SIF_TRACKPOS,
+                        ..Default::default()
+                    };
+                    // SAFETY: valid SCROLLINFO for our own window.
+                    if unsafe { GetScrollInfo(hwnd, SB_VERT, &mut info) }.is_ok() {
+                        scroll_to(info.nTrackPos);
+                    }
+                }
+                _ => {}
+            }
+            LRESULT(0)
+        }
+        WM_SIZE => {
+            update_scroll();
+            LRESULT(0)
+        }
+        WM_MOUSEWHEEL => {
+            let delta = ((wparam.0 >> 16) & 0xffff) as u16 as i16 as i32;
+            scroll_by(-delta * line_px() / 120);
+            LRESULT(0)
         }
         WM_ERASEBKGND => LRESULT(1),
         WM_PAINT => {

@@ -287,6 +287,57 @@ pub fn center_on(monitor: Option<Px>, primary: Px, size: (i32, i32)) -> (i32, i3
     (m.x + (m.w - size.0) / 2, m.y + (m.h - size.1) / 2)
 }
 
+/// The window rect: centered in the work area, never taller than it.
+pub fn fit(work: Px, size: (i32, i32)) -> Px {
+    let h = size.1.min(work.h);
+    Px {
+        x: work.x + (work.w - size.0) / 2,
+        y: work.y + (work.h - h) / 2,
+        w: size.0,
+        h,
+    }
+}
+
+/// A scroll offset kept between the top and the last full view of the content.
+pub fn clamp_scroll(offset: i32, content_h: i32, view_h: i32) -> i32 {
+    offset.clamp(0, (content_h - view_h).max(0))
+}
+
+/// The scroll offset that shows `item` (content coordinates) with `margin` around it.
+pub fn reveal(offset: i32, item: Px, view_h: i32, margin: i32) -> i32 {
+    if item.y - margin < offset {
+        item.y - margin
+    } else if item.y + item.h + margin > offset + view_h {
+        item.y + item.h + margin - view_h
+    } else {
+        offset
+    }
+}
+
+impl Page {
+    /// The same page moved vertically by `dy` pixels (for drawing a scrolled view).
+    pub fn shifted(&self, dy: i32) -> Page {
+        let mv = |r: &Px| Px { y: r.y + dy, ..*r };
+        Page {
+            width: self.width,
+            height: self.height,
+            cards: self.cards.iter().map(mv).collect(),
+            hints: self.hints.iter().map(mv).collect(),
+            dividers: self.dividers.iter().map(mv).collect(),
+            tiles: self.tiles.iter().map(|(r, c, k)| (mv(r), *c, *k)).collect(),
+            texts: self
+                .texts
+                .iter()
+                .map(|t| Text {
+                    rect: mv(&t.rect),
+                    ..t.clone()
+                })
+                .collect(),
+            controls: self.controls.iter().map(|(i, r)| (*i, mv(r))).collect(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -381,6 +432,75 @@ mod tests {
         let p = layout("T", &with, 1.0, &Fake);
         assert_eq!(p.hints.len(), 1);
         assert!(p.height > without + 36);
+    }
+
+    #[test]
+    fn window_fits_the_work_area() {
+        // 1366×768 with a 40 px taskbar: a 780 px tall window is clamped and pinned inside.
+        let work = Px {
+            x: 0,
+            y: 0,
+            w: 1366,
+            h: 728,
+        };
+        assert_eq!(
+            fit(work, (476, 780)),
+            Px {
+                x: 445,
+                y: 0,
+                w: 476,
+                h: 728
+            }
+        );
+        assert_eq!(
+            fit(work, (476, 600)),
+            Px {
+                x: 445,
+                y: 64,
+                w: 476,
+                h: 600
+            }
+        );
+    }
+
+    #[test]
+    fn scroll_stays_within_the_content() {
+        assert_eq!(clamp_scroll(-5, 900, 700), 0);
+        assert_eq!(clamp_scroll(150, 900, 700), 150);
+        assert_eq!(clamp_scroll(400, 900, 700), 200);
+        assert_eq!(clamp_scroll(50, 600, 700), 0, "no scrolling when it fits");
+    }
+
+    #[test]
+    fn focus_scrolls_the_control_into_view() {
+        let item = |y| Px {
+            x: 0,
+            y,
+            w: 40,
+            h: 20,
+        };
+        assert_eq!(reveal(0, item(100), 300, 8), 0, "already visible");
+        assert_eq!(
+            reveal(0, item(400), 300, 8),
+            128,
+            "below: bottom edge plus margin"
+        );
+        assert_eq!(
+            reveal(200, item(50), 300, 8),
+            42,
+            "above: top edge minus margin"
+        );
+    }
+
+    #[test]
+    fn shifting_a_page_moves_every_rect() {
+        let p = layout("T", &sample_blocks(), 1.0, &Fake);
+        let s = p.shifted(-30);
+        assert_eq!(s.cards[0].y, p.cards[0].y - 30);
+        assert_eq!(s.controls[1].1.y, p.controls[1].1.y - 30);
+        assert_eq!(s.texts[0].rect.y, p.texts[0].rect.y - 30);
+        assert_eq!(s.dividers[0].y, p.dividers[0].y - 30);
+        assert_eq!(s.height, p.height);
     }
 
     #[test]
