@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" width="600" height="600" role="img" aria-labelledby="t d">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 618" width="600" height="618" role="img" aria-labelledby="t d">
   <title id="t">Flipping from personal to work</title>
-  <desc id="d">Ink drawing of a grinning developer flipping a wall light switch from PERSONAL to WORK; below, the taskbar strip reads WORK, claude 22%, codex 8%.</desc>
+  <desc id="d">Ink drawing of a grinning developer flipping a wall light switch from PERSONAL to WORK; below, the taskbar strip reads WORK, claude 22%, codex 8%; at the bottom, github.com/chiarorosa/claude-codex-taskbar.</desc>
   <defs>
     <path id="head" d="M120,250 C115,175 165,150 205,155 C255,160 280,200 276,250 C272,300 240,330 195,330 C150,330 123,300 120,250 Z"/>
     <path id="body" d="M155,318 C152,345 140,362 118,382 C82,418 66,470 62,520 L322,520 C318,470 304,425 268,392 C250,376 242,348 240,320"/>
@@ -8,7 +8,7 @@
     <rect id="plate" x="340" y="110" width="160" height="240" rx="18"/>
   </defs>
 
-  <rect width="600" height="600" fill="#F3EDE2"/>
+  <rect width="600" height="618" fill="#F3EDE2"/>
 
   <!-- Three promises, taped to the wall -->
   <g font-family="Consolas, 'Cascadia Mono', Menlo, monospace" font-size="17" font-weight="700" text-anchor="middle">
@@ -113,4 +113,7 @@
     <rect x="488" y="547" width="26" height="26" rx="4"/>
     <rect x="524" y="547" width="26" height="26" rx="4"/>
   </g>
+
+  <!-- Signature: where to get it -->
+  <text x="590" y="612" text-anchor="end" font-family="Consolas, 'Cascadia Mono', Menlo, monospace" font-size="11" fill="#1D1D1B" opacity="0.6">github.com/chiarorosa/claude-codex-taskbar</text>
 </svg>
