@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" width="600" height="600" role="img" aria-labelledby="t d">
+  <title id="t">Flipping from personal to work</title>
+  <desc id="d">Ink drawing of a grinning developer flipping a wall light switch from PERSONAL to WORK; below, the taskbar strip reads WORK, claude 22%, codex 8%.</desc>
+  <defs>
+    <path id="head" d="M120,250 C115,175 165,150 205,155 C255,160 280,200 276,250 C272,300 240,330 195,330 C150,330 123,300 120,250 Z"/>
+    <path id="body" d="M155,318 C152,345 140,362 118,382 C82,418 66,470 62,520 L322,520 C318,470 304,425 268,392 C250,376 242,348 240,320"/>
+    <path id="arm" d="M262,418 Q350,382 404,276"/>
+    <rect id="plate" x="340" y="110" width="160" height="240" rx="18"/>
+  </defs>
+
+  <rect width="600" height="600" fill="#F3EDE2"/>
+
+  <!-- Three promises, taped to the wall -->
+  <g font-family="Consolas, 'Cascadia Mono', Menlo, monospace" font-size="17" font-weight="700" text-anchor="middle">
+    <g transform="rotate(-3 132 56)">
+      <rect x="60" y="36" width="144" height="40" fill="#2F5FD0" transform="translate(5,5)"/>
+      <rect x="60" y="36" width="144" height="40" fill="#FFFDF8" stroke="#1D1D1B" stroke-width="3"/>
+      <text x="132" y="62" fill="#1D1D1B">free forever</text>
+      <rect x="114" y="28" width="36" height="13" fill="#E6DECF" opacity="0.9" transform="rotate(4 132 34)"/>
+    </g>
+    <g transform="rotate(2 296 56)">
+      <rect x="228" y="36" width="136" height="40" fill="#2F5FD0" transform="translate(5,5)"/>
+      <rect x="228" y="36" width="136" height="40" fill="#FFFDF8" stroke="#1D1D1B" stroke-width="3"/>
+      <text x="296" y="62" fill="#1D1D1B">tiny always</text>
+      <rect x="278" y="28" width="36" height="13" fill="#E6DECF" opacity="0.9" transform="rotate(-5 296 34)"/>
+    </g>
+    <g transform="rotate(-2 464 56)">
+      <rect x="388" y="36" width="152" height="40" fill="#2F5FD0" transform="translate(5,5)"/>
+      <rect x="388" y="36" width="152" height="40" fill="#FF5A36" stroke="#1D1D1B" stroke-width="3"/>
+      <text x="464" y="62" fill="#1D1D1B">3 clicks away</text>
+      <rect x="446" y="28" width="36" height="13" fill="#E6DECF" opacity="0.9" transform="rotate(3 464 34)"/>
+    </g>
+  </g>
+
+  <g transform="translate(22,0)">
+  <!-- Light switch: blue print layer offset, then ink -->
+  <use href="#plate" fill="#2F5FD0" transform="translate(10,10)"/>
+  <use href="#plate" fill="#FFFDF8" stroke="#1D1D1B" stroke-width="4"/>
+  <g stroke="#1D1D1B" stroke-width="3" stroke-linecap="round">
+    <circle cx="420" cy="132" r="7" fill="none"/><path d="M415,135 L425,129"/>
+    <circle cx="420" cy="328" r="7" fill="none"/><path d="M415,331 L425,325"/>
+  </g>
+  <g font-family="Consolas, 'Cascadia Mono', Menlo, monospace" font-weight="700" fill="#1D1D1B" text-anchor="middle">
+    <text x="420" y="168" font-size="15" opacity="0.45">PERSONAL</text>
+    <path d="M389,290 C405,287 437,286 452,289 L450,310 C433,312 405,312 390,309 Z" fill="#FF5A36"/>
+    <text x="420" y="305" font-size="16">WORK</text>
+  </g>
+  <rect x="395" y="180" width="50" height="100" rx="8" fill="#E6DECF" stroke="#1D1D1B" stroke-width="4"/>
+  <rect x="402" y="232" width="36" height="42" rx="6" fill="#FF5A36" stroke="#1D1D1B" stroke-width="4"/>
+
+  <!-- click -->
+  <g fill="none" stroke="#1D1D1B" stroke-width="3" stroke-linecap="round">
+    <path d="M458,226 L474,218"/>
+    <path d="M462,244 L480,244"/>
+    <path d="M458,262 L474,270"/>
+  </g>
+  <text x="486" y="210" font-family="Consolas, 'Cascadia Mono', Menlo, monospace" font-size="15" fill="#1D1D1B" transform="rotate(-12 486 210)">click.</text>
+
+  </g>
+
+  <!-- Body -->
+  <use href="#body" fill="#2F5FD0" transform="translate(8,6)"/>
+  <use href="#body" fill="none" stroke="#1D1D1B" stroke-width="4" stroke-linejoin="round"/>
+  <g stroke="#1D1D1B" stroke-width="2.5" stroke-linecap="round">
+    <path d="M96,470 L120,446"/><path d="M92,492 L128,456"/><path d="M98,508 L134,472"/>
+  </g>
+
+  <!-- Arm reaching the switch -->
+  <use href="#arm" fill="none" stroke="#1D1D1B" stroke-width="52" stroke-linecap="round"/>
+  <use href="#arm" fill="none" stroke="#2F5FD0" stroke-width="44" stroke-linecap="round"/>
+  <circle cx="408" cy="262" r="21" fill="#F6C9A6" stroke="#1D1D1B" stroke-width="4"/>
+  <path d="M416,250 L434,233" stroke="#1D1D1B" stroke-width="20" stroke-linecap="round"/>
+  <path d="M416,250 L434,233" stroke="#F6C9A6" stroke-width="12" stroke-linecap="round"/>
+
+  <!-- Head: skin layer offset, then ink -->
+  <use href="#head" fill="#F6C9A6" transform="translate(7,6)"/>
+  <use href="#head" fill="none" stroke="#1D1D1B" stroke-width="4"/>
+  <path d="M124,228 C118,172 160,140 210,147 C252,152 276,180 279,214 L263,199 L256,216 L241,191 L233,211 L216,187 L206,207 L191,185 L179,206 L161,189 L150,214 L138,200 Z" fill="#1D1D1B"/>
+  <!-- ear -->
+  <path d="M146,240 C130,236 128,266 146,268" fill="none" stroke="#1D1D1B" stroke-width="4" stroke-linecap="round"/>
+  <!-- glasses, looking at the switch -->
+  <g fill="none" stroke="#1D1D1B" stroke-width="4">
+    <circle cx="214" cy="240" r="20"/>
+    <circle cx="262" cy="238" r="16"/>
+    <path d="M234,238 L246,237"/>
+    <path d="M194,236 L150,232"/>
+  </g>
+  <circle cx="222" cy="237" r="4.5" fill="#1D1D1B"/>
+  <circle cx="268" cy="235" r="4" fill="#1D1D1B"/>
+  <g fill="none" stroke="#1D1D1B" stroke-width="4" stroke-linecap="round">
+    <path d="M198,208 Q214,198 230,206"/>
+    <path d="M252,206 Q264,200 274,206"/>
+    <!-- nose -->
+    <path d="M246,252 C268,262 288,276 270,287 C262,291 252,288 247,283"/>
+  </g>
+  <!-- grin -->
+  <path d="M196,294 Q233,330 268,293 Q233,305 196,294 Z" fill="#1D1D1B" stroke="#1D1D1B" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M214,300 L250,299 L247,306 L217,306 Z" fill="#FFFDF8"/>
+  <g stroke="#FF5A36" stroke-width="3" stroke-linecap="round">
+    <path d="M168,282 L180,270"/><path d="M176,288 L188,276"/><path d="M184,294 L196,282"/>
+  </g>
+
+  <!-- Taskbar -->
+  <rect x="0" y="520" width="600" height="80" fill="#1D1D1B"/>
+  <g font-family="Consolas, 'Cascadia Mono', Menlo, monospace" font-size="16" font-weight="700">
+    <rect x="24" y="543" width="70" height="34" fill="#FF5A36"/>
+    <text x="59" y="566" text-anchor="middle" fill="#1D1D1B">WORK</text>
+    <text x="110" y="566" fill="#F3EDE2">claude 22%</text>
+    <text x="226" y="566" fill="#F3EDE2">codex 8%</text>
+  </g>
+  <g fill="none" stroke="#F3EDE2" stroke-width="2" opacity="0.35">
+    <rect x="452" y="547" width="26" height="26" rx="4"/>
+    <rect x="488" y="547" width="26" height="26" rx="4"/>
+    <rect x="524" y="547" width="26" height="26" rx="4"/>
+  </g>
+</svg>
