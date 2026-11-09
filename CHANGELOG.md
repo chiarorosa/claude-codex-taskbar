@@ -25,12 +25,16 @@ All notable changes to this project are documented here. The format follows
   Claude and the Codex gauges, as a badge in each service's color, tells you which account the numbers
   belong to, e.g. `P` for personal and `W` for work. Each saved Claude account has its own
   label, so a switch changes it too. Edit it in Settings; leave it empty to hide it (#74).
-- Groundwork for limit notifications: detection of 80% / 95% crossings per provider and window,
-  with no repeats until a real reset, and opt-in settings `notify_near_limit` and
-  `notify_thresholds` in `config.json`. Nothing is shown yet; the notification itself is the
-  next part of #15 (#73, thanks @gnevesx).
+- **Quota alerts (opt-in).** A Windows notification when fresh Claude or Codex usage crosses
+  80% or 95% of a window (thresholds in `config.json`), showing the highest threshold crossed
+  per window. Off by default: turn it on in Settings (**Notify near limit**). It never replays
+  old crossings, waits for a real reset before warning again, and stays quiet in full screen,
+  presentations and quiet hours (#15, #73, #76, thanks @gnevesx).
 
 ### Fixed
+- Codex and *Keep login active*: when the `codex app-server` fallback or a login status
+  command times out, the whole process tree is now killed, so a `.cmd` shim can no longer
+  leave `node` or the CLI running in the background (#62, #75, thanks @FramY2).
 - Windows 10: Settings and the tooltip now explain why the strip stays hidden (there is no
   free taskbar corner there) instead of showing nothing (#64, #71, thanks @Daiyuanranfeng;
   confirmed by @pedrohassen).
