@@ -275,13 +275,13 @@ pub fn tooltip_text(
 }
 
 /// Taskbar settings the user should change for the strip to show up well.
-/// Windows 10 has no centered taskbar and no Widgets button, so both hints are skipped.
+/// Windows 10 has no centered taskbar and no Widgets button, so it gets its own note.
 pub fn setup_hints(hints: TaskbarHints) -> Vec<Key> {
+    if hints.windows_10 {
+        return vec![Key::HintWindows10];
+    }
     [
-        (
-            hints.left_aligned && !hints.windows_10,
-            Key::HintCenterTaskbar,
-        ),
+        (hints.left_aligned, Key::HintCenterTaskbar),
         (hints.widgets_button_on, Key::HintWidgetsButton),
     ]
     .into_iter()
@@ -538,8 +538,17 @@ mod hint_tests {
                 windows_10: true,
                 ..Default::default()
             }),
-            Vec::<Key>::new(),
-            "Windows 10 has no centering option and no Widgets button"
+            [Key::HintWindows10],
+            "Windows 10 gets a note instead of the centering and Widgets hints"
+        );
+        assert_eq!(
+            setup_hints(TaskbarHints {
+                windows_10: true,
+                widgets_button_on: true,
+                ..Default::default()
+            }),
+            [Key::HintWindows10],
+            "Windows 10 has no Widgets button to turn off"
         );
     }
 }

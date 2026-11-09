@@ -66,6 +66,7 @@ pub enum Key {
     ErrorFmt,
     HintCenterTaskbar,
     HintWidgetsButton,
+    HintWindows10,
     HiddenItems,
     LoginFound,
     SettingsTitle,
@@ -113,6 +114,7 @@ impl Key {
         Key::ErrorFmt,
         Key::HintCenterTaskbar,
         Key::HintWidgetsButton,
+        Key::HintWindows10,
         Key::HiddenItems,
         Key::LoginFound,
         Key::SettingsTitle,
@@ -184,6 +186,10 @@ pub fn t(lang: Lang, key: Key) -> &'static str {
         Key::HintWidgetsButton => (
             "Turn off the Windows Widgets button to free this corner (Settings → Personalization → Taskbar → Widgets)",
             "Desative o botão de Widgets do Windows para liberar este canto (Configurações → Personalização → Barra de tarefas → Widgets)",
+        ),
+        Key::HintWindows10 => (
+            "On Windows 10 the taskbar icons start at the left edge, so there is no free corner for the strip yet (see #10).",
+            "No Windows 10, os ícones da barra de tarefas começam na borda esquerda, então ainda não há um canto livre para a faixa (veja #10).",
         ),
         Key::HiddenItems => ("Not shown (no room):", "Não exibidos (sem espaço):"),
         Key::LoginFound => ("login found", "login encontrado"),
