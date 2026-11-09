@@ -124,7 +124,7 @@ Have more than one paid Claude plan (say, personal and work)? Switch between the
 
 1. While logged in to the first account in Claude Code, right-click the strip → **Claude account → Save current account**.
 2. In Claude Code, run `/login` with the second account, then **Save current account** again.
-3. From then on, pick an account under **Claude account** to switch. Claude Code picks up the new login on its next request; no restart is needed. If a task is running, the app asks first, because the rest of that task runs on the new account.
+3. From then on, pick an account under **Claude account** to switch. Claude Code picks up the new login on its next request; no restart is needed. If a task is running, or is waiting for your answer (for example on a permission prompt), the app asks first, because the rest of that task runs on the new account.
 
 Each entry shows the plan and the usage last seen on that account. `⚠ login expires in Nd` warns that a saved login is about to expire; `⚠ needs /login` means it has, so log in with that account and save it again. Remove an account under **Claude account → Remove saved account**.
 

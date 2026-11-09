@@ -296,8 +296,8 @@ pub fn t(lang: Lang, key: Key) -> &'static str {
         Key::AgoHoursFmt => ("{}h ago", "há {}h"),
         Key::AgoDaysFmt => ("{}d ago", "há {}d"),
         Key::SwitchBusyPrompt => (
-            "A Claude Code task is running. It will continue on the new account from its next request, and its first message there may use extra usage while the cache rebuilds.\n\nSwitch anyway?",
-            "Uma tarefa do Claude Code está em andamento. Ela continua na conta nova a partir da próxima requisição, e a primeira mensagem lá pode gastar mais uso enquanto o cache é reconstruído.\n\nTrocar mesmo assim?",
+            "A Claude Code task is running or waiting for your answer. It will continue on the new account from its next request, and its first message there may use extra usage while the cache rebuilds.\n\nSwitch anyway?",
+            "Uma tarefa do Claude Code está em andamento ou esperando sua resposta. Ela continua na conta nova a partir da próxima requisição, e a primeira mensagem lá pode gastar mais uso enquanto o cache é reconstruído.\n\nTrocar mesmo assim?",
         ),
         Key::SwitchUnsavedPrompt => (
             "The current Claude login is not saved. A safety copy is kept, but it will not appear in the list.\n\nSwitch anyway? (Choose No, then Save current account, to keep it in the list.)",
