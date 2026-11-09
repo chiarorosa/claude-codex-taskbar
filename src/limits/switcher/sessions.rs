@@ -11,13 +11,20 @@ use windows::Win32::System::Threading::{
     GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
 };
 
-/// Pids of live sessions whose record says `"status": "busy"`. Dead pids and unreadable
-/// records are ignored.
+/// Pids of live sessions with a task underway: `"busy"`, or `"waiting"`, which Claude Code
+/// writes instead of `"busy"` while a turn waits on the user (a permission prompt, a
+/// question, a sandbox request, a dialog). Answering it resumes the task on whatever login
+/// is live, so it counts as running. Dead pids and unreadable records are ignored.
 pub fn busy_sessions(records: &[String], is_alive: impl Fn(u32) -> bool) -> Vec<u32> {
     records
         .iter()
         .filter_map(|text| serde_json::from_str::<Value>(text).ok())
-        .filter(|r| r.get("status").and_then(Value::as_str) == Some("busy"))
+        .filter(|r| {
+            matches!(
+                r.get("status").and_then(Value::as_str),
+                Some("busy" | "waiting")
+            )
+        })
         .filter_map(|r| r.get("pid").and_then(Value::as_u64))
         .filter_map(|pid| u32::try_from(pid).ok())
         .filter(|&pid| is_alive(pid))
@@ -49,7 +56,7 @@ pub fn is_process_alive(pid: u32) -> bool {
     }
 }
 
-/// Live Claude Code tasks right now.
+/// Live Claude Code tasks right now, running or waiting on the user.
 pub fn busy_now(home: &Path) -> Vec<u32> {
     busy_sessions(&read_session_records(home), is_process_alive)
 }
@@ -63,16 +70,28 @@ mod tests {
     }
 
     #[test]
-    fn reports_only_live_busy_sessions() {
+    fn reports_live_sessions_that_are_running_or_waiting_on_the_user() {
         let records = vec![
             rec(10, "busy"),
             rec(11, "idle"),
             rec(12, "waiting"),
             rec(13, "busy"),
+            rec(14, "waiting"),
+            rec(15, "something-new"),
             "{torn".to_string(),
             r#"{"status":"busy"}"#.to_string(),
         ];
-        assert_eq!(busy_sessions(&records, |pid| pid != 13), vec![10]);
+        assert_eq!(
+            busy_sessions(&records, |pid| pid != 13 && pid != 14),
+            vec![10, 12]
+        );
+    }
+
+    #[test]
+    fn a_task_paused_on_a_permission_prompt_counts_as_running() {
+        // Claude Code writes "waiting" instead of "busy" while a turn waits for an answer.
+        let record = r#"{"pid":20,"sessionId":"s","cwd":"C:/x","status":"waiting","waitingFor":"permission prompt"}"#;
+        assert_eq!(busy_sessions(&[record.to_string()], |_| true), vec![20]);
     }
 
     #[test]
