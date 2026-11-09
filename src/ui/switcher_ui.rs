@@ -213,6 +213,10 @@ fn start_switch(hwnd: HWND, target: u32, lang: Lang, last_seen: Option<LastSeen>
     if SWITCHING.swap(true, Ordering::Relaxed) {
         return;
     }
+    // Settings shows the account being left (its label field edits that account). Close it
+    // like Esc does, so pending edits land on that account before the switch writes the
+    // account index, and a reopened window shows the new account.
+    super::settings::close_if_open();
     let strip = hwnd.0 as isize;
     let override_dir = config_dir_override();
     std::thread::spawn(move || {

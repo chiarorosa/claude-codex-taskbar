@@ -752,6 +752,14 @@ fn apply_fields() {
     }
 }
 
+/// Closes the settings window, if open, the way Esc does: pending field edits are applied
+/// first. Used before a Claude account switch.
+pub fn close_if_open() {
+    if let Some(hwnd) = with_state(|s| s.hwnd) {
+        close(hwnd);
+    }
+}
+
 /// Opens the settings window, or focuses it if it is already open.
 pub fn open(parent: HWND) {
     if let Some(hwnd) = with_state(|s| s.hwnd) {
