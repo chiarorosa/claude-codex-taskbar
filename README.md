@@ -129,6 +129,7 @@ Have more than one paid Claude plan (say, personal and work)? Switch between the
 Each entry shows the plan and the usage last seen on that account. `⚠ login expires in Nd` warns that a saved login is about to expire; `⚠ needs /login` means it has, so log in with that account and save it again. Remove an account under **Claude account → Remove saved account**.
 
 - **Paid plans only.** Pro, Max, Team and Enterprise logins can be saved. Free logins and active Claude Code trials can't.
+- **Claude Code CLI only.** Switching changes the login in `~/.claude/.credentials.json`, which the `claude` CLI uses. The Claude desktop app keeps its own login elsewhere, so switching does not change the account it uses.
 - **Always manual.** The app never switches on its own and never rotates accounts to get around usage limits.
 - **Use only accounts that belong to you.** Sharing logins or reselling access violates Anthropic's terms.
 - **How it is kept safe.** Saved logins are encrypted with Windows DPAPI for your user, in `%APPDATA%\claude-codex-taskbar\accounts\`. A switch holds Claude Code's own lock files, backs up the account being left (so its renewed token is never lost), writes through a temp file, and restores everything if any step fails. Not supported when `CLAUDE_CONFIG_DIR` is set.
