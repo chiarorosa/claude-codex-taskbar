@@ -131,10 +131,21 @@ fn timestamp_secs(v: &Value) -> Option<i64> {
     }
 }
 
-/// Parses `.credentials.json`. `None` when it is not a Claude subscription login.
+/// Parses `.credentials.json`. `None` when it is not a Claude subscription login, including
+/// a blank shell whose keys exist but whose tokens are empty (#45): saving that and switching
+/// back to it would log Claude Code out.
 pub fn parse_login(creds_text: &str) -> Option<LoginInfo> {
     let creds: Value = serde_json::from_str(creds_text).ok()?;
     let oauth = creds.get("claudeAiOauth")?.as_object()?;
+    let has_token = |key: &str| {
+        oauth
+            .get(key)
+            .and_then(Value::as_str)
+            .is_some_and(|t| !t.is_empty())
+    };
+    if !has_token("accessToken") || !has_token("refreshToken") {
+        return None;
+    }
     Some(LoginInfo {
         plan: oauth
             .get("subscriptionType")
@@ -528,6 +539,35 @@ mod tests {
         assert_eq!(parse_login(r#"{"other":1}"#), None);
     }
 
+    /// A credentials file can be a blank shell: the keys are there, the tokens are empty (#45).
+    fn blank_shell(plan: &str, access: &str, refresh: &str) -> String {
+        serde_json::json!({
+            "claudeAiOauth": {
+                "accessToken": access,
+                "refreshToken": refresh,
+                "expiresAt": 0,
+                "scopes": [],
+                "subscriptionType": plan,
+                "rateLimitTier": "",
+            },
+            "organizationUuid": "",
+        })
+        .to_string()
+    }
+
+    #[test]
+    fn blank_or_tokenless_credentials_are_not_subscription_logins() {
+        for (access, refresh) in [("", ""), ("sk-ant-oat01-FAKE", ""), ("", "rt")] {
+            assert_eq!(
+                parse_login(&blank_shell("max", access, refresh)),
+                None,
+                "access={access:?} refresh={refresh:?}"
+            );
+        }
+        let no_refresh = r#"{"claudeAiOauth":{"accessToken":"a","subscriptionType":"pro"}}"#;
+        assert_eq!(parse_login(no_refresh), None);
+    }
+
     // ---- plan gate ----
 
     #[test]
@@ -736,6 +776,14 @@ mod tests {
         };
         assert_eq!(
             store.save_current(&api_key, false, NOW),
+            Err(SaveError::Ineligible(Ineligible::NotSubscription))
+        );
+        let blank = LiveLogin {
+            credentials: Secret::new(blank_shell("max", "", "")),
+            config_text: config("u-1", "a@x.com", "org-1"),
+        };
+        assert_eq!(
+            store.save_current(&blank, false, NOW),
             Err(SaveError::Ineligible(Ineligible::NotSubscription))
         );
         let no_identity = LiveLogin {
