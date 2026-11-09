@@ -99,6 +99,15 @@ impl Config {
         !self.hidden_items.contains(&key)
     }
 
+    /// Whether moving from `self` to `new` needs a limits fetch now.
+    pub fn needs_limits_wake(&self, new: &Config) -> bool {
+        self.claude_enabled != new.claude_enabled
+            || self.codex_enabled != new.codex_enabled
+            || self.limits_interval_secs != new.limits_interval_secs
+            || self.keep_claude_login != new.keep_claude_login
+            || self.keep_codex_login != new.keep_codex_login
+    }
+
     pub fn set_visible(&mut self, id: &ItemId, visible: bool) {
         let key = item_key(id);
         self.hidden_items.retain(|k| *k != key);
@@ -156,6 +165,29 @@ mod notify_tests;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_provider_or_interval_changes_wake_the_worker() {
+        let old = Config::default();
+        let mut items = old.clone();
+        items.set_visible(&ItemId::Cpu, false);
+        assert!(!old.needs_limits_wake(&items));
+        let mut hw = old.clone();
+        hw.hw_interval_secs = 4;
+        assert!(!old.needs_limits_wake(&hw));
+        let changes: [fn(&mut Config); 5] = [
+            |c| c.claude_enabled = !c.claude_enabled,
+            |c| c.codex_enabled = !c.codex_enabled,
+            |c| c.limits_interval_secs = 600,
+            |c| c.keep_claude_login = !c.keep_claude_login,
+            |c| c.keep_codex_login = !c.keep_codex_login,
+        ];
+        for change in changes {
+            let mut new = old.clone();
+            change(&mut new);
+            assert!(old.needs_limits_wake(&new));
+        }
+    }
     use std::path::PathBuf;
 
     fn temp_file(name: &str) -> PathBuf {

@@ -170,10 +170,15 @@ impl App {
     }
 
     pub fn apply_config(&mut self, cfg: Config) {
-        self.cfg = cfg.clamped();
+        let cfg = cfg.clamped();
+        // Settings applies every click; only limit-related changes justify a fetch.
+        let wake = self.cfg.needs_limits_wake(&cfg);
+        self.cfg = cfg;
         let _ = self.cfg.save_to(&self.cfg_path);
         self.apply_provider_flags();
-        self.control.wake();
+        if wake {
+            self.control.wake();
+        }
     }
 
     pub fn sample_hw(&mut self) {
