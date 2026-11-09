@@ -43,6 +43,9 @@ const SEP_H: f32 = 30.0;
 const ELLIPSIS: &str = "…";
 /// Space between an account label and its gauge (#74).
 const BADGE_GAP: f32 = 5.0;
+/// Account label badge: horizontal padding and height, square corners.
+const BADGE_PAD: f32 = 4.0;
+const BADGE_H: f32 = 16.0;
 
 struct Palette {
     label: u32,
@@ -170,7 +173,7 @@ impl Renderer {
     /// Width in DIPs an item's account label takes, gap included; 0 without a label.
     fn badge_width(&self, item: &ItemView) -> f32 {
         item.badge.as_deref().map_or(0.0, |b| {
-            self.text_width(b, &self.value_fmt).ceil() + BADGE_GAP
+            self.text_width(b, &self.value_fmt).ceil() + 2.0 * BADGE_PAD + BADGE_GAP
         })
     }
 
@@ -304,16 +307,20 @@ impl Renderer {
                     },
                     dpi,
                 );
-                // Account label in the service color, centered on the whole block (#74).
+                // Account label: a square-cornered badge in the service color with white
+                // text, centered on the whole block (#74).
                 if let Some(badge) = item.badge.as_deref() {
                     let bw = self.badge_width(item);
-                    set(bar_color(item.kind, Some(0.0)), 1.0);
+                    let by = top + (block_h - BADGE_H) / 2.0;
                     let r = D2D_RECT_F {
                         left: x,
-                        top,
+                        top: by,
                         right: x + bw - BADGE_GAP,
-                        bottom: top + block_h,
+                        bottom: by + BADGE_H,
                     };
+                    set(bar_color(item.kind, Some(0.0)), 1.0);
+                    rt.FillRectangle(&r, &brush);
+                    set(0xffffff, 1.0);
                     rt.DrawText(
                         &wide(badge),
                         &self.value_fmt,

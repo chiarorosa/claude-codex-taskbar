@@ -254,7 +254,7 @@ struct ProviderCard {
 }
 
 /// The page model from the facts and the current check states.
-fn blocks(facts: &Facts, checks: &[(Toggle, String, bool)], light: bool) -> Vec<Block> {
+fn blocks(facts: &Facts, checks: &[(Toggle, String, bool)]) -> Vec<Block> {
     let lang = facts.lang;
     let id_of =
         |toggle: &Toggle| ID_CHECK + checks.iter().position(|(t, _, _)| t == toggle).unwrap_or(0);
@@ -315,7 +315,7 @@ fn blocks(facts: &Facts, checks: &[(Toggle, String, bool)], light: bool) -> Vec<
         toggle: Toggle::Claude,
         keep: Toggle::KeepAliveClaude,
         name: "Claude Code",
-        tile: ('C', 0xD97757),
+        tile: ('C', crate::model::COLOR_CLAUDE),
         login: facts.claude_login,
         missing: Key::ClaudeNoLogin,
         keep_sub: Key::KeepAliveSubClaude,
@@ -330,7 +330,7 @@ fn blocks(facts: &Facts, checks: &[(Toggle, String, bool)], light: bool) -> Vec<
         toggle: Toggle::Codex,
         keep: Toggle::KeepAliveCodex,
         name: "Codex",
-        tile: ('X', if light { 0x2F2F2F } else { 0x4A4A4A }),
+        tile: ('X', crate::model::COLOR_CODEX),
         login: facts.codex_login,
         missing: Key::CodexNoLogin,
         keep_sub: Key::KeepAliveSubCodex,
@@ -446,7 +446,7 @@ fn relayout() {
         return;
     };
     with_state_mut(|s| {
-        let model = blocks(&s.facts, &specs, s.light);
+        let model = blocks(&s.facts, &specs);
         let title = t(s.facts.lang, Key::SettingsPageTitle);
         s.page = layout::layout(title, &model, s.dpi as f32 / 96.0, &s.painter);
     });
