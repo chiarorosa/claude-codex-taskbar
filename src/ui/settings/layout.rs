@@ -144,7 +144,8 @@ impl Out<'_> {
                 state_text,
             } => {
                 let control_x = right - SWITCH_W;
-                let state_w = self.m.width(state_text, TextRole::Body);
+                // Slack keeps DirectWrite from wrapping text that exactly fills its rect.
+                let state_w = self.m.width(state_text, TextRole::Body).ceil() + 2.0;
                 let state_x = control_x - GAP - state_w;
                 let text_x = left
                     + if tile.is_some() || *indent {
@@ -362,6 +363,14 @@ mod tests {
         let (_, sw) = p.controls[0];
         assert_eq!((sw.w, sw.h), (40, 20));
         assert_eq!(sw.x + sw.w, p.cards[0].x + p.cards[0].w - 14);
+    }
+
+    #[test]
+    fn single_line_texts_get_room_so_they_never_wrap() {
+        // A rect exactly as wide as the measured text makes DirectWrite wrap its last letter.
+        let p = layout("T", &sample_blocks(), 1.0, &Fake);
+        let on = p.texts.iter().find(|t| t.text == "On").expect("state text");
+        assert!(on.rect.w > (Fake.width("On", TextRole::Body)) as i32);
     }
 
     #[test]

@@ -360,6 +360,11 @@ impl App {
         self.taskbar = Some(info);
     }
 
+    /// The monitor the strip's taskbar is on, from the last taskbar query.
+    pub fn strip_monitor(&self) -> Option<taskbar::Rect> {
+        self.taskbar.as_ref().map(|t| t.monitor)
+    }
+
     /// Hints input from the last taskbar query.
     pub fn taskbar_hints(&self) -> TaskbarHints {
         match &self.taskbar {
