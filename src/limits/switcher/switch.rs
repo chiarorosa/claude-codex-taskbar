@@ -364,42 +364,6 @@ mod tests {
         assert!(specs.iter().all(|s| !s.dir.exists()));
     }
 
-    /// Switches the REAL login back and forth between the first two saved slots.
-    /// Run only on purpose: `$env:CCT_LIVE_SWITCH=1; cargo test live_switch -- --ignored`.
-    /// Needs two paid accounts saved with Save current account. Sends one tiny prompt to each.
-    #[test]
-    #[ignore = "rewrites the real Claude Code login; needs CCT_LIVE_SWITCH=1"]
-    fn live_switch_between_two_saved_accounts() {
-        if std::env::var_os("CCT_LIVE_SWITCH").is_none() {
-            eprintln!("skipped: set CCT_LIVE_SWITCH=1 to run");
-            return;
-        }
-        let home = real_home();
-        let store = Store::new(Store::default_dir());
-        let acc = store.load().unwrap();
-        assert!(acc.slots.len() >= 2, "save two accounts first");
-        let start = acc.active_id.expect("an active slot");
-        let other = acc
-            .slots
-            .iter()
-            .map(|s| s.id)
-            .find(|&id| id != start)
-            .unwrap();
-        let now = crate::timeutil::now_unix;
-        for target in [other, start] {
-            let out = switch_to(&store, &home, target, false, None, now()).unwrap();
-            assert_eq!(out.to, target);
-            let ok = std::process::Command::new("claude")
-                .args(["-p", "Reply with OK"])
-                .output()
-                .unwrap();
-            assert!(
-                ok.status.success(),
-                "claude did not answer on slot {target}"
-            );
-        }
-    }
-
     // ---- classify ----
 
     #[test]
