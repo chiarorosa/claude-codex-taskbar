@@ -21,6 +21,15 @@ pub enum Kind {
     Codex,
 }
 
+/// Provider display name, e.g. Claude becomes "Claude Code"; hardware has no subscription.
+pub(crate) fn provider_name(kind: Kind) -> &'static str {
+    match kind {
+        Kind::Claude => "Claude Code",
+        Kind::Codex => "Codex",
+        Kind::Hardware => "",
+    }
+}
+
 pub const COLOR_HARDWARE: u32 = 0x4cc2ff;
 pub const COLOR_CLAUDE: u32 = 0xd97757;
 pub const COLOR_CODEX: u32 = 0x10a37f;
@@ -45,6 +54,13 @@ pub fn bar_color(kind: Kind, pct: Option<f32>) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn provider_names_are_shared_by_tooltips_and_notifications() {
+        assert_eq!(provider_name(Kind::Claude), "Claude Code");
+        assert_eq!(provider_name(Kind::Codex), "Codex");
+        assert_eq!(provider_name(Kind::Hardware), "");
+    }
 
     #[test]
     fn bar_colors_follow_thresholds() {

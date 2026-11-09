@@ -3,6 +3,7 @@
 pub mod app;
 pub mod clipboard;
 pub mod layout;
+pub mod notifications;
 pub mod render;
 pub mod settings;
 pub mod strip;

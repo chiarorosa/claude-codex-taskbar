@@ -18,7 +18,7 @@ use crate::limits::reset::{reset_refresh_delay, status_resets};
 use crate::limits::state::{STALE_SECS, age_status, next_status};
 use crate::limits::worker::{Control, Fetcher, LimitResult, spawn_queued};
 use crate::limits::{Provider, ProviderStatus};
-use crate::model::Kind;
+use crate::model::{Kind, provider_name};
 use crate::timeutil::format_local_hhmm;
 use crate::timeutil::now_unix;
 use std::path::PathBuf;
@@ -417,14 +417,6 @@ impl App {
             text.push_str(&format!("\n\n{}: {line}", provider_name(kind)));
         }
         if text.is_empty() { "CCT".into() } else { text }
-    }
-}
-
-pub(crate) fn provider_name(kind: Kind) -> &'static str {
-    match kind {
-        Kind::Claude => "Claude Code",
-        Kind::Codex => "Codex",
-        Kind::Hardware => "",
     }
 }
 
