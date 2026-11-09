@@ -509,3 +509,23 @@ pub fn run(app: App) -> i32 {
         msg.wParam.0 as i32
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn app_messages_never_share_an_id() {
+        // The balloon callback and the switcher's result once both used WM_APP + 4, so the
+        // notification handler swallowed "switch finished" and the switcher stayed busy.
+        let ids = [
+            WM_APP_LIMITS,
+            WM_APP_REASSERT,
+            WM_APP_OPEN_SETTINGS,
+            notifications::CALLBACK,
+            super::super::switcher_ui::WM_APP_SWITCHED,
+        ];
+        let unique: std::collections::BTreeSet<_> = ids.iter().collect();
+        assert_eq!(unique.len(), ids.len(), "{ids:?}");
+    }
+}
