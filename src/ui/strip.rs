@@ -115,9 +115,18 @@ fn wide_z(s: &str) -> Vec<u16> {
 }
 
 fn show_menu(hwnd: HWND) {
-    let Some((lang, autostart)) = with_app(|app| (app.lang, crate::autostart::is_enabled())) else {
+    let Some((lang, autostart, claude_on)) = with_app(|app| {
+        (
+            app.lang,
+            crate::autostart::is_enabled(),
+            app.cfg.claude_enabled,
+        )
+    }) else {
         return;
     };
+    let accounts = claude_on
+        .then(|| super::switcher_ui::current_menu(lang))
+        .flatten();
     // SAFETY: menu is created, tracked and destroyed here; the app is not borrowed meanwhile.
     let cmd = unsafe {
         let Ok(menu) = CreatePopupMenu() else { return };
@@ -133,6 +142,9 @@ fn show_menu(hwnd: HWND) {
         item(CMD_SETTINGS, Key::MenuSettings, false);
         item(CMD_REFRESH, Key::MenuRefresh, false);
         item(CMD_COPY, Key::MenuCopyUsage, false);
+        if let Some(model) = &accounts {
+            super::switcher_ui::append_submenu(menu, model, lang);
+        }
         item(CMD_AUTOSTART, Key::MenuAutostart, autostart);
         let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
         item(CMD_EXIT, Key::MenuExit, false);
@@ -175,7 +187,14 @@ fn show_menu(hwnd: HWND) {
                 let _ = DestroyWindow(hwnd);
             }
         }
-        _ => {}
+        0 => {}
+        other => {
+            let seen = with_app(|app| super::switcher_ui::snapshot(&app.claude)).flatten();
+            super::switcher_ui::handle_command(hwnd, other, lang, seen);
+            // Saving or removing an account can change the live account's label.
+            with_app(|app| app.refresh_claude_label());
+            render(hwnd);
+        }
     }
 }
 
@@ -251,6 +270,18 @@ extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM)
         }
         WM_APP_OPEN_SETTINGS => {
             super::settings::open(hwnd);
+            LRESULT(0)
+        }
+        super::switcher_ui::WM_APP_SWITCHED => {
+            let lang = with_app(|app| app.lang).unwrap_or(crate::i18n::Lang::En);
+            if super::switcher_ui::on_switched(lparam, lang) {
+                // Show the new account's limits and label right away (#48, #74).
+                with_app(|app| {
+                    app.refresh_claude_label();
+                    app.control.wake();
+                });
+                render(hwnd);
+            }
             LRESULT(0)
         }
         WM_DISPLAYCHANGE | WM_DPICHANGED => {
@@ -483,5 +514,25 @@ pub fn run(app: App) -> i32 {
         let _ = UnhookWinEvent(hook);
         APP.with(|cell| cell.borrow_mut().take());
         msg.wParam.0 as i32
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn app_messages_never_share_an_id() {
+        // The balloon callback and the switcher's result once both used WM_APP + 4, so the
+        // notification handler swallowed "switch finished" and the switcher stayed busy.
+        let ids = [
+            WM_APP_LIMITS,
+            WM_APP_REASSERT,
+            WM_APP_OPEN_SETTINGS,
+            notifications::CALLBACK,
+            super::super::switcher_ui::WM_APP_SWITCHED,
+        ];
+        let unique: std::collections::BTreeSet<_> = ids.iter().collect();
+        assert_eq!(unique.len(), ids.len(), "{ids:?}");
     }
 }

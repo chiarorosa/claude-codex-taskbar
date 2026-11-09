@@ -16,7 +16,8 @@ use windows::Win32::UI::WindowsAndMessaging::{
     IsWindow, WM_APP, WM_DESTROY, WM_SETTINGCHANGE, WM_TIMER,
 };
 
-const CALLBACK: u32 = WM_APP + 4;
+/// Balloon callbacks; WM_APP + 4 is the switcher's result message.
+pub(super) const CALLBACK: u32 = WM_APP + 5;
 
 thread_local! {
     static LIFE: RefCell<BalloonLife> = RefCell::new(BalloonLife::default());
