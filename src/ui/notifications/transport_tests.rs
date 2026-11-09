@@ -156,10 +156,7 @@ fn busy_delivery_is_discarded_without_replaying_consumed_crossings() {
         1_000_000,
     );
     let body = balloon_text(Lang::En, &cfg, &batch).unwrap();
-    assert_eq!(
-        body,
-        "Claude Code 5h reached 95%\nClaude Code weekly reached 95%"
-    );
+    assert_eq!(body, "Claude Code: 5h 95% · weekly 95%");
     let shell = FakeNotificationSink {
         blocked: true,
         ..sink()
@@ -197,7 +194,7 @@ fn classified_result_batch_reaches_the_shell_once_with_only_fresh_data() {
     let body = balloon_text(Lang::En, &cfg, &batch).unwrap();
     assert_eq!(
         body,
-        "Claude Code 5h reached 95%\nClaude Code weekly reached 95%\nCodex 5h reached 95%\nCodex weekly reached 95%"
+        "Claude Code: 5h 95% · weekly 95%\nCodex: 5h 95% · weekly 95%"
     );
     let shell = sink();
     assert!(send_balloon(
@@ -218,6 +215,6 @@ fn classified_result_batch_reaches_the_shell_once_with_only_fresh_data() {
     );
     assert_eq!(
         shell.payloads.borrow()[2],
-        (7, "CCT — Usage warning".into(), body)
+        (7, "CCT — Usage limits".into(), body)
     );
 }

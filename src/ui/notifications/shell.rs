@@ -4,10 +4,10 @@ use super::{BalloonCommand, NotificationSink, wide_array};
 use windows::Win32::Foundation::{HWND, LPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::Shell::{
-    NIF_ICON, NIF_INFO, NIF_MESSAGE, NIF_REALTIME, NIF_SHOWTIP, NIF_TIP, NIIF_NOSOUND,
-    NIIF_RESPECT_QUIET_TIME, NIIF_WARNING, NIM_ADD, NIM_DELETE, NIM_MODIFY, NIM_SETVERSION,
-    NOTIFYICON_VERSION_4, NOTIFYICONDATAW, QUERY_USER_NOTIFICATION_STATE,
-    QUNS_ACCEPTS_NOTIFICATIONS, SHQueryUserNotificationState, Shell_NotifyIconW,
+    NIF_ICON, NIF_INFO, NIF_MESSAGE, NIF_REALTIME, NIF_SHOWTIP, NIF_TIP, NIIF_INFO, NIIF_NOSOUND,
+    NIIF_RESPECT_QUIET_TIME, NIM_ADD, NIM_DELETE, NIM_MODIFY, NIM_SETVERSION, NOTIFYICON_VERSION_4,
+    NOTIFYICONDATAW, QUERY_USER_NOTIFICATION_STATE, QUNS_ACCEPTS_NOTIFICATIONS,
+    SHQueryUserNotificationState, Shell_NotifyIconW,
 };
 use windows::Win32::UI::WindowsAndMessaging::{IDI_APPLICATION, KillTimer, LoadIconW, SetTimer};
 use windows::core::PCWSTR;
@@ -69,7 +69,7 @@ fn packet(
         BalloonCommand::Version => data.Anonymous.uVersion = NOTIFYICON_VERSION_4,
         BalloonCommand::Show => {
             data.uFlags = NIF_INFO | NIF_REALTIME;
-            data.dwInfoFlags = NIIF_WARNING | NIIF_RESPECT_QUIET_TIME | NIIF_NOSOUND;
+            data.dwInfoFlags = NIIF_INFO | NIIF_RESPECT_QUIET_TIME | NIIF_NOSOUND;
             data.szInfoTitle = wide_array(title);
             data.szInfo = wide_array(body);
         }
@@ -163,7 +163,7 @@ mod tests {
         assert_eq!(info.uFlags, NIF_INFO | NIF_REALTIME);
         assert_eq!(
             info.dwInfoFlags,
-            NIIF_WARNING | NIIF_RESPECT_QUIET_TIME | NIIF_NOSOUND
+            NIIF_INFO | NIIF_RESPECT_QUIET_TIME | NIIF_NOSOUND
         );
         assert_eq!(info.szInfoTitle, wide_array::<64>("Título"));
         assert_eq!(info.szInfo, wide_array::<256>("Aviso 💡"));

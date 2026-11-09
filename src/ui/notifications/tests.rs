@@ -251,13 +251,13 @@ fn balloon_groups_highest_crossings_with_exact_localized_text() {
     for (lang, title, body) in [
         (
             Lang::En,
-            "CCT — Usage warning",
-            "Claude Code 5h reached 95%\nClaude Code weekly reached 95%\nCodex 5h reached 80%\nCodex weekly reached 80%",
+            "CCT — Usage limits",
+            "Claude Code: 5h 95% · weekly 95%\nCodex: 5h 80% · weekly 80%",
         ),
         (
             Lang::PtBr,
-            "CCT — Aviso de uso",
-            "Claude Code 5h atingiu 95%\nClaude Code semanal atingiu 95%\nCodex 5h atingiu 80%\nCodex semanal atingiu 80%",
+            "CCT — Limites de uso",
+            "Claude Code: 5h 95% · semanal 95%\nCodex: 5h 80% · semanal 80%",
         ),
     ] {
         assert_eq!(t(lang, Key::NotifyTitle), title);
@@ -283,7 +283,7 @@ fn text_filters_current_settings_and_empty_batches() {
     batch.extend(notices(Kind::Codex, 80));
     assert_eq!(
         balloon_text(Lang::En, &cfg, &batch),
-        Some("Codex 5h reached 80%\nCodex weekly reached 80%".into())
+        Some("Codex: 5h 80% · weekly 80%".into())
     );
     assert_eq!(balloon_text(Lang::En, &enabled(), &[]), None);
     assert_eq!(balloon_text(Lang::En, &Config::default(), &batch), None);

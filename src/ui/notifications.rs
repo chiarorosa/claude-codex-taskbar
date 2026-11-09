@@ -3,7 +3,7 @@
 pub mod shell;
 
 use crate::config::Config;
-use crate::i18n::{Key, Lang, fmt2, t};
+use crate::i18n::{Key, Lang, t};
 use crate::limits::notify::{CrossingState, Event, LimitWindow, crossings};
 use crate::limits::state::{STALE_SECS, age_status, next_status};
 use crate::limits::{FetchError, ProviderStatus, ProviderUsage};
@@ -82,27 +82,25 @@ pub fn balloon_text(lang: Lang, cfg: &Config, notices: &[Notice]) -> Option<Stri
         .into_iter()
         .filter(|k| provider_enabled(cfg, *k))
     {
-        for window in [LimitWindow::FiveHour, LimitWindow::Weekly] {
+        let mut windows = Vec::new();
+        for (window, label) in [
+            (LimitWindow::FiveHour, Key::NotifyFiveHour),
+            (LimitWindow::Weekly, Key::SettingsWeekSuffix),
+        ] {
             let highest = notices
                 .iter()
                 .filter(|n| n.kind == kind && n.event.window == window)
                 .map(|n| n.event.threshold)
                 .max();
             if let Some(threshold) = highest {
-                lines.push(notice_line(lang, kind, window, threshold));
+                windows.push(format!("{} {threshold}%", t(lang, label)));
             }
+        }
+        if !windows.is_empty() {
+            lines.push(format!("{}: {}", provider_name(kind), windows.join(" · ")));
         }
     }
     (!lines.is_empty()).then(|| lines.join("\n"))
-}
-
-fn notice_line(lang: Lang, kind: Kind, window: LimitWindow, threshold: u32) -> String {
-    let key = match window {
-        LimitWindow::FiveHour => Key::NotifyFiveHour,
-        LimitWindow::Weekly => Key::SettingsWeekSuffix,
-    };
-    let label = format!("{} {}", provider_name(kind), t(lang, key));
-    fmt2(t(lang, Key::NotifyUsageFmt), &label, &threshold.to_string())
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
