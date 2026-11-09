@@ -135,6 +135,7 @@ fn model_data_does_not_change_strip_items() {
         &HwSnapshot::default(),
         &status,
         &ProviderStatus::Disabled,
+        "P",
         Lang::En,
     );
     let limits: Vec<_> = items

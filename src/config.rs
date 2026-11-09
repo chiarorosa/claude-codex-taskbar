@@ -11,6 +11,9 @@ pub const APP_DIR: &str = "claude-codex-taskbar";
 /// Folder used by v0.1.x, migrated once at startup.
 pub const LEGACY_APP_DIR: &str = "widget-usage-windows";
 const DEFAULT_NOTIFY_THRESHOLDS: [u32; 2] = [80, 95];
+const DEFAULT_LABEL: &str = "P";
+/// Longest account label, in characters (#74).
+pub const LABEL_MAX: usize = 5;
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 #[serde(default)]
@@ -33,6 +36,11 @@ pub struct Config {
     pub notify_near_limit: bool,
     /// Percent-used thresholds, normalized to unique ascending values in 1..=100.
     pub notify_thresholds: Vec<u32>,
+    /// Shown before the Claude gauges when the live login is not a saved account with its
+    /// own label (#74). Up to 5 characters; empty hides it.
+    pub claude_label: String,
+    /// Shown before the Codex gauges (#74).
+    pub codex_label: String,
 }
 
 impl Default for Config {
@@ -50,6 +58,8 @@ impl Default for Config {
             codex_keepalive_asked: false,
             notify_near_limit: false,
             notify_thresholds: DEFAULT_NOTIFY_THRESHOLDS.to_vec(),
+            claude_label: DEFAULT_LABEL.into(),
+            codex_label: DEFAULT_LABEL.into(),
         }
     }
 }
@@ -81,6 +91,8 @@ impl Config {
         self.hw_interval_secs = self.hw_interval_secs.clamp(1, 5);
         self.limits_interval_secs = self.limits_interval_secs.clamp(60, 3600);
         clamp_notify_thresholds(&mut self.notify_thresholds);
+        self.claude_label = normalize_label(&self.claude_label);
+        self.codex_label = normalize_label(&self.codex_label);
         // Normalize v0.1/v0.2 disk keys once, including disks not currently connected.
         for key in &mut self.hidden_items {
             if let Some(instance) = key.strip_prefix("disk:")
@@ -115,6 +127,17 @@ impl Config {
             self.hidden_items.push(key);
         }
     }
+}
+
+/// An account label as shown: trimmed and at most [`LABEL_MAX`] characters (not bytes).
+pub fn normalize_label(label: &str) -> String {
+    label
+        .trim()
+        .chars()
+        .take(LABEL_MAX)
+        .collect::<String>()
+        .trim_end()
+        .to_string()
 }
 
 fn clamp_notify_thresholds(thresholds: &mut Vec<u32>) {
@@ -167,6 +190,39 @@ mod tests {
     use super::*;
 
     #[test]
+    fn provider_labels_default_to_p_and_old_configs_get_them() {
+        let cfg = Config::default();
+        assert_eq!(
+            (cfg.claude_label.as_str(), cfg.codex_label.as_str()),
+            ("P", "P")
+        );
+        let old: Config = serde_json::from_str(r#"{"claude_enabled":true}"#).unwrap();
+        assert_eq!(
+            (old.claude_label.as_str(), old.codex_label.as_str()),
+            ("P", "P")
+        );
+    }
+
+    #[test]
+    fn labels_are_trimmed_and_cut_to_five_characters() {
+        assert_eq!(normalize_label("  Work  "), "Work");
+        assert_eq!(normalize_label("Business"), "Busin");
+        assert_eq!(normalize_label("Pessoal"), "Pesso");
+        assert_eq!(normalize_label("Éàçõü!"), "Éàçõü", "characters, not bytes");
+        assert_eq!(normalize_label("   "), "", "empty hides the label");
+        let cfg = Config {
+            claude_label: " Personal ".into(),
+            codex_label: "W".into(),
+            ..Config::default()
+        }
+        .clamped();
+        assert_eq!(
+            (cfg.claude_label.as_str(), cfg.codex_label.as_str()),
+            ("Perso", "W")
+        );
+    }
+
+    #[test]
     fn only_provider_or_interval_changes_wake_the_worker() {
         let old = Config::default();
         let mut items = old.clone();
@@ -212,6 +268,8 @@ mod tests {
             codex_keepalive_asked: true,
             notify_near_limit: true,
             notify_thresholds: vec![75, 90],
+            claude_label: "W".into(),
+            codex_label: "Pess".into(),
         };
         cfg.save_to(&path).unwrap();
         assert_eq!(Config::load_from(&path), cfg);

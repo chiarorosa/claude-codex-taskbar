@@ -57,6 +57,17 @@ pub fn apply_numbers(base: &Config, hw_text: &str, limits_text: &str) -> Config 
     cfg.clamped()
 }
 
+/// The config after the label fields were edited. With `claude_saved`, the Claude label
+/// belongs to the saved account and is written to the account index instead (#74).
+pub fn apply_labels(base: &Config, claude: &str, codex: &str, claude_saved: bool) -> Config {
+    let mut cfg = base.clone();
+    if !claude_saved {
+        cfg.claude_label = claude.to_string();
+    }
+    cfg.codex_label = codex.to_string();
+    cfg.clamped()
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tone {
     Success,
@@ -167,6 +178,22 @@ mod tests {
         assert_eq!(f("0", "0"), (1, 60));
         assert_eq!(f("99999", "99999"), (5, 3600));
         assert_eq!(f(" 4 ", "abc"), (4, 120));
+    }
+
+    #[test]
+    fn labels_go_to_the_config_unless_the_claude_account_is_saved() {
+        let base = Config::default();
+        let cfg = apply_labels(&base, " Work ", "Business", false);
+        assert_eq!(
+            (cfg.claude_label.as_str(), cfg.codex_label.as_str()),
+            ("Work", "Busin")
+        );
+        // A saved live account keeps its label in the account index, not in the config.
+        let cfg = apply_labels(&base, "W", "C", true);
+        assert_eq!(
+            (cfg.claude_label.as_str(), cfg.codex_label.as_str()),
+            ("P", "C")
+        );
     }
 
     #[test]
