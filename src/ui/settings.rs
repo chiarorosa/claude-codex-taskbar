@@ -1,5 +1,9 @@
 //! Settings window: provider and item switches, refresh intervals, start with Windows.
 
+// Wired into the window in Task 5 of the redesign plan; the allow goes away then.
+#[allow(dead_code)]
+mod palette;
+
 use super::app::{claude_provider, codex_provider};
 use super::strip::{config_applied, with_app};
 use super::view::setup_hints;
