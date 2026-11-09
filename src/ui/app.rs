@@ -63,6 +63,8 @@ pub struct App {
     keepalive_claude: KeepAlive,
     keepalive_codex: KeepAlive,
     notifications: Notifications,
+    /// Label before the Claude gauges; resolved from the saved accounts (#74).
+    claude_label: String,
 }
 
 fn light_theme() -> bool {
@@ -146,6 +148,7 @@ impl App {
             keepalive_claude: KeepAlive::default(),
             keepalive_codex: KeepAlive::default(),
             notifications: Notifications::default(),
+            claude_label: super::switcher_ui::live_claude_label(&cfg.claude_label),
             cfg,
             cfg_path,
         };
@@ -175,6 +178,7 @@ impl App {
         let wake = self.cfg.needs_limits_wake(&cfg);
         self.cfg = cfg;
         let _ = self.cfg.save_to(&self.cfg_path);
+        self.refresh_claude_label();
         self.apply_provider_flags();
         if wake {
             self.control.wake();
@@ -187,6 +191,11 @@ impl App {
 
     pub fn refresh_instances(&mut self) {
         self.sampler.refresh_instances();
+    }
+
+    /// Re-reads which saved Claude account is live and its label.
+    pub fn refresh_claude_label(&mut self) {
+        self.claude_label = super::switcher_ui::live_claude_label(&self.cfg.claude_label);
     }
 
     fn keepalive_of(&mut self, kind: Kind) -> Option<(bool, &ProviderStatus, &mut KeepAlive)> {
@@ -325,7 +334,14 @@ impl App {
         info.icons_left = self.icons.value();
         let dpi = info.dpi;
         let (claude, codex) = self.displayed_statuses();
-        self.items = build_items(&self.cfg, &self.hw, &claude, &codex, self.lang);
+        self.items = build_items(
+            &self.cfg,
+            &self.hw,
+            &claude,
+            &codex,
+            &self.claude_label,
+            self.lang,
+        );
         let metrics = self.renderer.measure(&self.items, dpi);
         let margin = to_px(MARGIN_DIP, dpi);
         let kinds: Vec<_> = self
