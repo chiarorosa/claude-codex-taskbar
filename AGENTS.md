@@ -32,7 +32,8 @@ and run `claude-codex-taskbar.exe`.
   locks, DPAPI account store with the paid-plan gate, switch transaction, session status).
 - `src/hw/` — PDH performance counters (CPU, GPU engines, physical disks) and RAM.
 - `src/ui/` — layout math, taskbar geometry, view model, Direct2D renderer, strip window,
-  settings window, Claude account menu (`accounts.rs`, `switcher_ui.rs`).
+  Claude account menu (`accounts.rs`, `switcher_ui.rs`), and the Settings window
+  (`settings.rs` + `settings/`: palette, model, layout, Direct2D painter).
 - `src/config.rs`, `src/i18n.rs` (English and pt-BR), `src/autostart.rs`.
 
 ## Rules
@@ -52,5 +53,7 @@ and run `claude-codex-taskbar.exe`.
 - Network access only to the providers' own usage endpoints. No telemetry.
 - Never show `0%` for an error; error states render `—`.
 - All user-facing text goes through `i18n::t` with both English and pt-BR strings.
+- UI changes follow [DESIGN.md](DESIGN.md): real controls with our paint, Windows theme and
+  accent, documented APIs only.
 - Keep the binary small and dependencies minimal; discuss new crates in an issue first.
 - Conventional Commits; small, focused PRs.
