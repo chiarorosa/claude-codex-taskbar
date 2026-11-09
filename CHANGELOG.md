@@ -22,7 +22,7 @@ All notable changes to this project are documented here. The format follows
   - Applies to the `claude` CLI only: the Claude desktop app keeps its own login. Not supported
     when `CLAUDE_CONFIG_DIR` is set.
 - **Account labels on the strip.** A short label (up to 5 characters, default `P`) before the
-  Claude and the Codex gauges, in each service's color, tells you which account the numbers
+  Claude and the Codex gauges, as a badge in each service's color, tells you which account the numbers
   belong to, e.g. `P` for personal and `W` for work. Each saved Claude account has its own
   label, so a switch changes it too. Edit it in Settings; leave it empty to hide it (#74).
 - Groundwork for limit notifications: detection of 80% / 95% crossings per provider and window,
@@ -43,6 +43,7 @@ All notable changes to this project are documented here. The format follows
   OK/Cancel; Esc closes). Switches and chips are real checkboxes underneath, so the keyboard
   and Narrator keep working. Design rules are in the new `DESIGN.md` (#58).
 - Changing visible items or the hardware interval no longer triggers a limits fetch.
+- Codex's color is now blue (`#3b82f6`) instead of green, on the strip and in Settings.
 - Privacy: the account switcher is the one exception to read-only credentials. Only when you
   pick an account to switch to does the app write `~/.claude/.credentials.json` and the
   `oauthAccount` key of `~/.claude.json`; *Save current account* only reads them. The Codex login
