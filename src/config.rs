@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 pub const APP_DIR: &str = "claude-codex-taskbar";
 /// Folder used by v0.1.x, migrated once at startup.
 pub const LEGACY_APP_DIR: &str = "widget-usage-windows";
+const DEFAULT_NOTIFY_THRESHOLDS: [u32; 2] = [80, 95];
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 #[serde(default)]
@@ -28,6 +29,10 @@ pub struct Config {
     /// Opt-in: run `codex login status` when the Codex login has expired.
     pub keep_codex_login: bool,
     pub codex_keepalive_asked: bool,
+    /// Opt-in notification delivery; the UI is a separate slice of #15.
+    pub notify_near_limit: bool,
+    /// Percent-used thresholds, normalized to unique ascending values in 1..=100.
+    pub notify_thresholds: Vec<u32>,
 }
 
 impl Default for Config {
@@ -43,6 +48,8 @@ impl Default for Config {
             keepalive_asked: false,
             keep_codex_login: false,
             codex_keepalive_asked: false,
+            notify_near_limit: false,
+            notify_thresholds: DEFAULT_NOTIFY_THRESHOLDS.to_vec(),
         }
     }
 }
@@ -73,6 +80,7 @@ impl Config {
     pub fn clamped(mut self) -> Config {
         self.hw_interval_secs = self.hw_interval_secs.clamp(1, 5);
         self.limits_interval_secs = self.limits_interval_secs.clamp(60, 3600);
+        clamp_notify_thresholds(&mut self.notify_thresholds);
         // Normalize v0.1/v0.2 disk keys once, including disks not currently connected.
         for key in &mut self.hidden_items {
             if let Some(instance) = key.strip_prefix("disk:")
@@ -98,6 +106,17 @@ impl Config {
             self.hidden_items.push(key);
         }
     }
+}
+
+fn clamp_notify_thresholds(thresholds: &mut Vec<u32>) {
+    if thresholds.is_empty() {
+        thresholds.extend(DEFAULT_NOTIFY_THRESHOLDS);
+    }
+    for threshold in thresholds.iter_mut() {
+        *threshold = (*threshold).clamp(1, 100);
+    }
+    thresholds.sort_unstable();
+    thresholds.dedup();
 }
 
 /// Disks with drive letters keep their identity when PDH disk indices change.
@@ -132,6 +151,9 @@ pub fn default_path() -> PathBuf {
 }
 
 #[cfg(test)]
+mod notify_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use std::path::PathBuf;
@@ -156,6 +178,8 @@ mod tests {
             keepalive_asked: true,
             keep_codex_login: true,
             codex_keepalive_asked: true,
+            notify_near_limit: true,
+            notify_thresholds: vec![75, 90],
         };
         cfg.save_to(&path).unwrap();
         assert_eq!(Config::load_from(&path), cfg);
