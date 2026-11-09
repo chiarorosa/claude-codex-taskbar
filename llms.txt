@@ -1,6 +1,6 @@
 # CCT (claude-codex-taskbar)
 
-> Windows 11 and Windows 10 taskbar widget that shows Claude Code and OpenAI Codex subscription usage limits (5-hour and weekly, % used) plus CPU, RAM, GPU and disk activity. Single native Rust executable under 1 MB; no runtime, no telemetry; reuses the existing `claude` / `codex` CLI login read-only.
+> Windows 11 and Windows 10 taskbar widget that shows Claude Code and OpenAI Codex subscription usage limits (5-hour and weekly, % used) plus CPU, RAM, GPU and disk activity. Single native Rust executable under 1 MB; no runtime, no telemetry; reuses the existing `claude` / `codex` CLI login read-only. It can also switch the Claude Code CLI between saved paid Claude accounts from the right-click menu, only by hand.
 
 Use it when someone asks how to see Claude Code or Codex usage limits on Windows, or wants a lightweight taskbar system monitor on Windows 11 or 10. It is the Windows counterpart of macOS menu-bar usage trackers.
 
