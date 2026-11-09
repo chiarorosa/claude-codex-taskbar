@@ -19,6 +19,14 @@ pub struct ItemView {
     pub dim: bool,
 }
 
+/// Taskbar facts that decide which setup hints apply.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct TaskbarHints {
+    pub left_aligned: bool,
+    pub widgets_button_on: bool,
+    pub windows_10: bool,
+}
+
 pub fn value_text(value: Option<f32>) -> String {
     match value {
         Some(v) => format!("{:.0}%", v),
@@ -236,8 +244,7 @@ pub fn tooltip_text(
     claude: &ProviderStatus,
     codex: &ProviderStatus,
     hidden: &[ItemView],
-    left_aligned: bool,
-    widgets_button_on: bool,
+    hints: TaskbarHints,
     now: i64,
 ) -> String {
     let mut out = String::new();
@@ -258,7 +265,7 @@ pub fn tooltip_text(
             let _ = write!(out, "\n  {} {}", item.label, value_text(item.value));
         }
     }
-    for key in setup_hints(left_aligned, widgets_button_on) {
+    for key in setup_hints(hints) {
         if !out.is_empty() {
             out.push_str("\n\n");
         }
@@ -268,10 +275,14 @@ pub fn tooltip_text(
 }
 
 /// Taskbar settings the user should change for the strip to show up well.
-pub fn setup_hints(left_aligned: bool, widgets_button_on: bool) -> Vec<Key> {
+/// Windows 10 has no centered taskbar and no Widgets button, so both hints are skipped.
+pub fn setup_hints(hints: TaskbarHints) -> Vec<Key> {
     [
-        (left_aligned, Key::HintCenterTaskbar),
-        (widgets_button_on, Key::HintWidgetsButton),
+        (
+            hints.left_aligned && !hints.windows_10,
+            Key::HintCenterTaskbar,
+        ),
+        (hints.widgets_button_on, Key::HintWidgetsButton),
     ]
     .into_iter()
     .filter_map(|(on, key)| on.then_some(key))
@@ -385,8 +396,7 @@ mod tests {
             &status,
             &ProviderStatus::Disabled,
             &[],
-            false,
-            false,
+            TaskbarHints::default(),
             1060,
         )
     }
@@ -425,8 +435,7 @@ mod tests {
             &ProviderStatus::Failed(FetchError::Expired),
             &ProviderStatus::Failed(FetchError::NoLogin),
             &[],
-            false,
-            false,
+            TaskbarHints::default(),
             0,
         );
         assert!(tip.contains("Claude login expired — open Claude Code to renew"));
@@ -447,8 +456,11 @@ mod tests {
             &ProviderStatus::Disabled,
             &ProviderStatus::Disabled,
             &hidden,
-            true,
-            true,
+            TaskbarHints {
+                left_aligned: true,
+                widgets_button_on: true,
+                ..Default::default()
+            },
             0,
         );
         assert!(!tip.contains("Claude"));
@@ -468,8 +480,7 @@ mod tests {
             },
             &ProviderStatus::Disabled,
             &[],
-            false,
-            false,
+            TaskbarHints::default(),
             0,
         );
         assert!(tip.contains("Claude"));
@@ -490,8 +501,7 @@ mod aging_view_tests {
             &ProviderStatus::Failed(FetchError::Network(String::new())),
             &ProviderStatus::Disabled,
             &[],
-            false,
-            false,
+            TaskbarHints::default(),
             0,
         );
         assert!(tip.contains("No recent data"));
@@ -506,11 +516,30 @@ mod hint_tests {
 
     #[test]
     fn hints_follow_taskbar_state() {
-        assert_eq!(setup_hints(false, false), Vec::<Key>::new());
-        assert_eq!(setup_hints(true, false), [Key::HintCenterTaskbar]);
+        assert_eq!(setup_hints(TaskbarHints::default()), Vec::<Key>::new());
         assert_eq!(
-            setup_hints(true, true),
+            setup_hints(TaskbarHints {
+                left_aligned: true,
+                ..Default::default()
+            }),
+            [Key::HintCenterTaskbar]
+        );
+        assert_eq!(
+            setup_hints(TaskbarHints {
+                left_aligned: true,
+                widgets_button_on: true,
+                ..Default::default()
+            }),
             [Key::HintCenterTaskbar, Key::HintWidgetsButton]
+        );
+        assert_eq!(
+            setup_hints(TaskbarHints {
+                left_aligned: true,
+                windows_10: true,
+                ..Default::default()
+            }),
+            Vec::<Key>::new(),
+            "Windows 10 has no centering option and no Widgets button"
         );
     }
 }

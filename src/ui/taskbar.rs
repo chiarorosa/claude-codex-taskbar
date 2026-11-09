@@ -55,6 +55,9 @@ pub struct TaskbarInfo {
     /// False while an auto-hidden taskbar is slid off screen.
     pub visible: bool,
     pub left_aligned: bool,
+    /// Windows 10 has neither a centered taskbar nor a Widgets button.
+    pub windows_10: bool,
+    /// Always false on Windows 10, which has no Widgets button.
     pub widgets_button_on: bool,
     /// Left edge of the Start button, i.e. where the taskbar icons begin.
     pub icons_left: Option<i32>,
@@ -150,10 +153,22 @@ pub fn is_fullscreen(fg: Rect, monitor: Rect, fg_is_shell: bool) -> bool {
 /// First Windows 11 build; Windows 10 has no centered taskbar and no `TaskbarAl` value.
 pub const WIN11_FIRST_BUILD: u32 = 22000;
 
+/// Windows 10 or older. An unknown build is treated as Windows 11: every supported
+/// release reports its build through `RtlGetVersion`.
+pub fn is_windows_10(build: Option<u32>) -> bool {
+    build.is_some_and(|b| b < WIN11_FIRST_BUILD)
+}
+
 /// Whether the taskbar icons start at the left edge, leaving no free corner for the strip.
 /// `build` is the Windows build number; `taskbar_al` is the `TaskbarAl` registry value.
 pub fn icons_left_aligned(build: Option<u32>, taskbar_al: Option<u32>) -> bool {
-    build.is_some_and(|b| b < WIN11_FIRST_BUILD) || taskbar_al == Some(0)
+    is_windows_10(build) || taskbar_al == Some(0)
+}
+
+/// Whether the Widgets button is present and enabled. Windows 10 has no Widgets button
+/// at all; on Windows 11 a missing `TaskbarDa` means the default, which is on.
+pub fn widgets_button_on(build: Option<u32>, taskbar_da: Option<u32>) -> bool {
+    !is_windows_10(build) && taskbar_da != Some(0)
 }
 
 const ADVANCED_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced";
@@ -233,6 +248,7 @@ pub fn query(with_icons: bool) -> Option<TaskbarInfo> {
     };
     // SAFETY: cbSize is set.
     let state = unsafe { SHAppBarMessage(ABM_GETSTATE, &mut abd) } as u32;
+    let build = windows_build();
     let overlap = rect.bottom.min(monitor.bottom) - rect.top.max(monitor.top);
     Some(TaskbarInfo {
         rect,
@@ -241,8 +257,9 @@ pub fn query(with_icons: bool) -> Option<TaskbarInfo> {
         dpi: unsafe { GetDpiForWindow(hwnd) }.max(96),
         autohide: state & ABS_AUTOHIDE != 0,
         visible: overlap > 4,
-        left_aligned: icons_left_aligned(windows_build(), reg_dword(ADVANCED_KEY, "TaskbarAl")),
-        widgets_button_on: reg_dword(ADVANCED_KEY, "TaskbarDa").is_none_or(|v| v == 1),
+        left_aligned: icons_left_aligned(build, reg_dword(ADVANCED_KEY, "TaskbarAl")),
+        windows_10: is_windows_10(build),
+        widgets_button_on: widgets_button_on(build, reg_dword(ADVANCED_KEY, "TaskbarDa")),
         icons_left: if with_icons {
             start_button_left(hwnd)
         } else {
@@ -273,6 +290,7 @@ mod tests {
             autohide: false,
             visible: true,
             left_aligned: false,
+            windows_10: false,
             widgets_button_on: false,
             icons_left,
         }
@@ -328,6 +346,29 @@ mod tests {
     fn unknown_build_follows_taskbar_alignment() {
         assert!(!icons_left_aligned(None, None));
         assert!(icons_left_aligned(None, Some(0)));
+    }
+
+    #[test]
+    fn windows10_has_no_widgets_button() {
+        assert!(!widgets_button_on(Some(19045), None));
+        assert!(!widgets_button_on(Some(19045), Some(1)));
+        assert!(!widgets_button_on(Some(19045), Some(0)));
+    }
+
+    #[test]
+    fn windows11_widgets_button_follows_taskbar_da() {
+        assert!(
+            widgets_button_on(Some(22631), None),
+            "a missing TaskbarDa is the default, which is on"
+        );
+        assert!(widgets_button_on(Some(WIN11_FIRST_BUILD), Some(1)));
+        assert!(!widgets_button_on(Some(22631), Some(0)));
+    }
+
+    #[test]
+    fn unknown_build_keeps_widgets_button_heuristic() {
+        assert!(widgets_button_on(None, None));
+        assert!(!widgets_button_on(None, Some(0)));
     }
 
     #[test]

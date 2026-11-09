@@ -214,7 +214,7 @@ pub fn open(parent: HWND) {
         }
         return;
     }
-    let Some((cfg, disks, lang, (left_aligned, widgets_on))) = with_app(|app| {
+    let Some((cfg, disks, lang, taskbar)) = with_app(|app| {
         (
             app.cfg.clone(),
             app.hw.disks.clone(),
@@ -224,7 +224,7 @@ pub fn open(parent: HWND) {
     }) else {
         return;
     };
-    let hints = setup_hints(left_aligned, widgets_on);
+    let hints = setup_hints(taskbar);
     create(parent, cfg, &disks, lang, &hints);
 }
 
