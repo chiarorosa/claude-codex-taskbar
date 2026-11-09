@@ -6,6 +6,8 @@ mod layout;
 #[allow(dead_code)]
 mod model;
 #[allow(dead_code)]
+mod paint;
+#[allow(dead_code)]
 mod palette;
 
 use super::app::{claude_provider, codex_provider};
