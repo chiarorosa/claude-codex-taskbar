@@ -36,8 +36,7 @@ fn claude_tip(lang: Lang, status: &ProviderStatus) -> String {
         status,
         &ProviderStatus::Disabled,
         &[],
-        false,
-        false,
+        TaskbarHints::default(),
         1793948399 - 4320,
     )
 }

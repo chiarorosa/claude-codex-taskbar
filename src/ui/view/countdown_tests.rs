@@ -36,7 +36,7 @@ fn timed_usage() -> ProviderUsage {
 }
 
 fn countdown_tip(lang: Lang, status: &ProviderStatus, now: i64) -> String {
-    tooltip_text(lang, status, status, &[], false, false, now)
+    tooltip_text(lang, status, status, &[], TaskbarHints::default(), now)
 }
 
 fn model_window(model: ModelKind, minutes: i64) -> (ModelKind, WindowUsage) {

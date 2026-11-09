@@ -6,7 +6,7 @@ use super::strip;
 use super::taskbar::{
     self, IconCache, TaskbarInfo, available_width, hides_for_fullscreen, is_fullscreen,
 };
-use super::view::{ItemView, build_items, tooltip_text};
+use super::view::{ItemView, TaskbarHints, build_items, tooltip_text};
 use crate::config::{self, Config};
 use crate::hw::{HwSnapshot, Sampler};
 use crate::i18n::{Key, fmt, t};
@@ -367,11 +367,16 @@ impl App {
         self.taskbar = Some(info);
     }
 
-    /// Hints input: (left-aligned icons, Widgets button on) from the last taskbar query.
-    pub fn taskbar_hints(&self) -> (bool, bool) {
-        self.taskbar
-            .as_ref()
-            .map_or((false, false), |t| (t.left_aligned, t.widgets_button_on))
+    /// Hints input from the last taskbar query.
+    pub fn taskbar_hints(&self) -> TaskbarHints {
+        match &self.taskbar {
+            Some(t) => TaskbarHints {
+                left_aligned: t.left_aligned,
+                widgets_button_on: t.widgets_button_on,
+                windows_10: t.windows_10,
+            },
+            None => TaskbarHints::default(),
+        }
     }
 
     pub fn tooltip(&self) -> String {
@@ -382,20 +387,9 @@ impl App {
                 .collect(),
             _ => Vec::new(),
         };
-        let (left, widgets) = self
-            .taskbar
-            .as_ref()
-            .map_or((false, false), |t| (t.left_aligned, t.widgets_button_on));
+        let hints = self.taskbar_hints();
         let (claude, codex) = self.displayed_statuses();
-        let text = tooltip_text(
-            self.lang,
-            &claude,
-            &codex,
-            &hidden,
-            left,
-            widgets,
-            now_unix(),
-        );
+        let text = tooltip_text(self.lang, &claude, &codex, &hidden, hints, now_unix());
         let mut text = text;
         for (kind, enabled, status, keepalive) in [
             (

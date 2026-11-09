@@ -16,7 +16,7 @@ use windows::Win32::System::SystemInformation::GetSystemDirectoryW;
 pub const MIN_INTERVAL_SECS: i64 = 15 * 60;
 /// Hard limit for one status command run; the CLI is killed after it.
 const RUN_TIMEOUT_MS: u32 = 60_000;
-const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+pub(crate) const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Outcome {
@@ -181,7 +181,7 @@ fn process_command_line(cli: &Path, args: &[&str], sys: &Path) -> Option<(PathBu
 }
 
 /// `C:\Windows\System32`: not writable by the user, so a safe working directory.
-fn system_dir() -> Option<PathBuf> {
+pub(crate) fn system_dir() -> Option<PathBuf> {
     let mut buf = [0u16; 260];
     // SAFETY: the buffer is valid for its whole length; the call writes at most that much.
     let len = unsafe { GetSystemDirectoryW(Some(&mut buf)) } as usize;
@@ -495,6 +495,24 @@ mod resolve_tests {
         assert_eq!(
             candidate_dirs(Kind::Codex, env(&[("PATH", r"C:\a")])),
             [p(r"C:\a")]
+        );
+    }
+
+    #[test]
+    fn codex_npm_shim_wins_over_windowsapps_on_path() {
+        let e = env(&[
+            ("LOCALAPPDATA", r"C:\Users\u\AppData\Local"),
+            ("APPDATA", r"C:\Users\u\AppData\Roaming"),
+            ("PATH", r"C:\Users\u\AppData\Local\Microsoft\WindowsApps"),
+        ]);
+        let dirs = candidate_dirs(Kind::Codex, e);
+        let exists = files(&[
+            r"C:\Users\u\AppData\Roaming\npm\codex.cmd",
+            r"C:\Users\u\AppData\Local\Microsoft\WindowsApps\codex.exe",
+        ]);
+        assert_eq!(
+            resolve_cli("codex", &dirs, exists),
+            Some(p(r"C:\Users\u\AppData\Roaming\npm\codex.cmd"))
         );
     }
 

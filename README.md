@@ -115,7 +115,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the toolchain setup.
 - **Toggle providers and items** in **Settings** (right-click → Settings). On first run, Claude and Codex are enabled automatically if their CLI login is found.
 - **Claude shows `—` after a few hours?** Claude Code's login token lasts about 8 hours and is renewed only by Claude Code itself. The app never refreshes it (so it can never log the CLI out); open Claude Code and the numbers come back on the next refresh.
 - **Keep login active (experimental, off by default), for Claude Code and Codex.** If you opt in (the app asks once on first run; also in **Settings**, one switch per provider), when a token has expired the app runs the CLI's own status command hidden (`claude auth status` or `codex login status`), at most every 15 minutes per provider, so the official CLI renews its own login. It sends no prompt and uses no quota. The tooltip tells you whether the renewal worked. **Feedback wanted:** please open an issue saying whether it renewed your login.
-- **Codex offline?** If the endpoint fails, the strip falls back to the last limits the Codex CLI wrote to its session logs, dimmed, as long as that window has not reset yet.
+- **Codex offline?** If the endpoint fails, the strip first asks the installed Codex CLI (`codex app-server --listen stdio://`) for live limits, and if that also fails, falls back to the last limits the Codex CLI wrote to its session logs, dimmed, as long as that window has not reset yet.
 
 ## Privacy
 
@@ -123,7 +123,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the toolchain setup.
 - **Network access is limited** to the providers' own usage endpoints, and only for the providers you enable.
 - **Credentials are read-only.** The app reads `~/.claude/.credentials.json` and `~/.codex/auth.json` (respecting `CODEX_HOME`) but never writes to them, never refreshes tokens, and never competes with the official CLIs.
 - **Credentials are never logged, copied, or sent anywhere** except to the corresponding provider's own endpoint.
-- **No other programs are run**, unless you turn on *Keep login active*, which runs only `claude auth status` and/or `codex login status` (hidden, output discarded).
+- **No other programs are run**, except when the Codex HTTP endpoint fails (it queries the local `codex app-server` over stdio, hidden) or when you turn on *Keep login active*, which runs only `claude auth status` and/or `codex login status` (hidden, output discarded).
 - Settings are stored locally in `%APPDATA%`.
 
 ## Disclaimer

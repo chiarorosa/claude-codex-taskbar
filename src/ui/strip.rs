@@ -453,7 +453,7 @@ pub fn run(app: App) -> i32 {
         with_app(|app| app.set_inbox(inbox));
         render(hwnd);
         // A left-aligned taskbar leaves no room, so the strip stays hidden: explain why.
-        if with_app(|app| app.taskbar_hints().0) == Some(true) {
+        if with_app(|app| app.taskbar_hints().left_aligned) == Some(true) {
             super::settings::open(hwnd);
         }
         // One-time opt-in invitation; the app is not borrowed while the modal box runs.
