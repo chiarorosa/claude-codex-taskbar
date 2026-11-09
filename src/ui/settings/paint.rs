@@ -29,8 +29,6 @@ const TITLE_SIZE: f32 = 20.0;
 const CAPTION_SIZE: f32 = 12.0;
 const BODY_SIZE: f32 = 13.0;
 const SECONDARY_SIZE: f32 = 11.5;
-/// Share of the warning color over the card color in a hint card.
-const HINT_TINT: f32 = 0.12;
 
 /// Switch knob center and radius in pixels: on sits right and is larger, off sits left.
 pub fn knob(r: Px, on: bool) -> (f32, f32, f32) {
@@ -52,15 +50,6 @@ fn color(rgb: u32) -> D2D1_COLOR_F {
         b: (rgb & 0xff) as f32 / 255.0,
         a: 1.0,
     }
-}
-
-/// `over` blended onto `base` with `share` of `over`.
-fn blend(base: u32, over: u32, share: f32) -> u32 {
-    let ch = |shift: u32| {
-        let (b, o) = ((base >> shift) & 0xff, (over >> shift) & 0xff);
-        ((b as f32) * (1.0 - share) + (o as f32) * share).round() as u32
-    };
-    (ch(16) << 16) | (ch(8) << 8) | ch(0)
 }
 
 fn rect_f(r: Px) -> D2D_RECT_F {
@@ -252,9 +241,9 @@ impl Painter {
                 rt.Clear(Some(&color(pal.bg)));
                 let set = |rgb: u32| brush.SetColor(&color(rgb));
                 for &r in &page.hints {
-                    set(blend(pal.card, pal.warning, HINT_TINT));
+                    set(pal.hint);
                     rt.FillRoundedRectangle(&rounded(r, radius), brush);
-                    set(blend(pal.border, pal.warning, 0.4));
+                    set(pal.hint_border);
                     rt.DrawRoundedRectangle(&rounded(r, radius), brush, 1.0, None);
                 }
                 for &r in &page.cards {
@@ -268,9 +257,16 @@ impl Painter {
                     rt.FillRectangle(&rect_f(r), brush);
                 }
                 for &(r, letter, rgb) in &page.tiles {
-                    set(rgb);
-                    rt.FillRoundedRectangle(&rounded(r, 6.0 * self.scale), brush);
-                    set(0xFFFFFF);
+                    let tile = rounded(r, 6.0 * self.scale);
+                    if pal.high_contrast {
+                        // System colors only: an outlined tile in the text color.
+                        set(pal.text);
+                        rt.DrawRoundedRectangle(&tile, brush, 1.0, None);
+                    } else {
+                        set(rgb);
+                        rt.FillRoundedRectangle(&tile, brush);
+                        set(0xFFFFFF);
+                    }
                     self.text(rt, brush, &letter.to_string(), &self.formats.tile, r);
                 }
                 for t in &page.texts {

@@ -15,6 +15,11 @@ pub struct Palette {
     pub field: u32,
     pub accent: u32,
     pub on_accent: u32,
+    /// Setup hint card fill and border.
+    pub hint: u32,
+    pub hint_border: u32,
+    /// System colors only: no brand tiles, no tints.
+    pub high_contrast: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -47,6 +52,9 @@ const LIGHT: Palette = Palette {
     field: 0xFFFFFF,
     accent: 0x005FB8,
     on_accent: 0xFFFFFF,
+    hint: 0,
+    hint_border: 0,
+    high_contrast: false,
 };
 
 const DARK: Palette = Palette {
@@ -62,7 +70,19 @@ const DARK: Palette = Palette {
     field: 0x1F1F1F,
     accent: 0x4CC2FF,
     on_accent: 0x000000,
+    hint: 0,
+    hint_border: 0,
+    high_contrast: false,
 };
+
+/// `over` blended onto `base` with `share` of `over`.
+pub fn blend(base: u32, over: u32, share: f32) -> u32 {
+    let ch = |shift: u32| {
+        let (b, o) = ((base >> shift) & 0xff, (over >> shift) & 0xff);
+        ((b as f32) * (1.0 - share) + (o as f32) * share).round() as u32
+    };
+    (ch(16) << 16) | (ch(8) << 8) | ch(0)
+}
 
 /// Mixes `rgb` 40% toward white, like the lighter accent Windows uses on dark surfaces.
 fn lighten(rgb: u32) -> u32 {
@@ -86,6 +106,9 @@ pub fn palette(t: &ThemeInputs) -> Palette {
             field: s.window,
             accent: s.highlight,
             on_accent: s.highlight_text,
+            hint: s.window,
+            hint_border: s.window_text,
+            high_contrast: true,
         };
     }
     let base = if t.light { LIGHT } else { DARK };
@@ -94,7 +117,12 @@ pub fn palette(t: &ThemeInputs) -> Palette {
         Some(a) => lighten(a),
         None => base.accent,
     };
-    Palette { accent, ..base }
+    Palette {
+        accent,
+        hint: blend(base.card, base.warning, 0.12),
+        hint_border: blend(base.border, base.warning, 0.4),
+        ..base
+    }
 }
 
 /// Reads the Windows app theme, High Contrast, the accent color and the system colors.
@@ -231,6 +259,17 @@ mod tests {
             luma(dark) > luma(0x0078D4),
             "dark mode uses a lighter accent"
         );
+    }
+
+    #[test]
+    fn hint_card_is_tinted_normally_and_plain_in_high_contrast() {
+        let light = palette(&inputs(true, false, None));
+        assert!(!light.high_contrast);
+        assert_ne!(light.hint, light.card, "warning tint over the card");
+        let hc = palette(&inputs(false, true, None));
+        let s = sys();
+        assert!(hc.high_contrast);
+        assert_eq!((hc.hint, hc.hint_border), (s.window, s.window_text));
     }
 
     #[test]
