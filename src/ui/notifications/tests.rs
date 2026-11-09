@@ -112,6 +112,37 @@ fn disabled_notifications_and_providers_do_not_replay_crossings() {
 }
 
 #[test]
+fn disabling_alerts_after_seeding_still_consumes_each_crossing() {
+    for kind in [Kind::Claude, Kind::Codex] {
+        for notifications_off in [true, false] {
+            let mut state = Notifications::default();
+            assert_eq!(
+                state.observe(&enabled(), kind, &reading(70.0, NOW), NOW),
+                vec![]
+            );
+            let mut cfg = enabled();
+            if notifications_off {
+                cfg.notify_near_limit = false;
+            } else {
+                match kind {
+                    Kind::Claude => cfg.claude_enabled = false,
+                    Kind::Codex => cfg.codex_enabled = false,
+                    Kind::Hardware => unreachable!(),
+                }
+            }
+            assert_eq!(state.observe(&cfg, kind, &reading(97.0, NOW), NOW), vec![]);
+            for percent in [97.0, 70.0, 97.0] {
+                assert_eq!(
+                    state.observe(&enabled(), kind, &reading(percent, NOW), NOW),
+                    vec![],
+                    "{kind:?}, notifications_off={notifications_off}, percent={percent}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn non_ok_readings_do_not_emit_or_change_history() {
     let ProviderStatus::Ok { usage, .. } = reading(97.0, NOW) else {
         unreachable!()
