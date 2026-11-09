@@ -29,6 +29,9 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use windows::core::{PCWSTR, w};
 
+mod toggles;
+use toggles::{Toggle, apply_toggle};
+
 const ID_OK: usize = 1;
 const ID_CANCEL: usize = 2;
 
@@ -36,16 +39,6 @@ const ID_CANCEL: usize = 2;
 const PAD: i32 = 14;
 const ROW: i32 = 24;
 const WIDTH: i32 = 380;
-
-#[derive(Clone, Debug, PartialEq)]
-enum Toggle {
-    Claude,
-    Codex,
-    Item(ItemId),
-    Autostart,
-    KeepAliveClaude,
-    KeepAliveCodex,
-}
 
 struct State {
     hwnd: HWND,
@@ -296,6 +289,10 @@ fn create(parent: HWND, cfg: Config, disks: &[DiskReading], lang: Lang, hints: &
             Toggle::KeepAliveCodex,
             b.check(&fmt(keep, "Codex"), cfg.keep_codex_login),
         ));
+        checks.push((
+            Toggle::NotifyNearLimit,
+            b.check(t(lang, Key::NotifyNearLimit), cfg.notify_near_limit),
+        ));
 
         b.header(t(lang, Key::SettingsItems));
         let weekly = t(lang, Key::SettingsWeekSuffix);
@@ -410,19 +407,8 @@ fn apply() {
         let mut autostart_on = None;
         for (toggle, hwnd) in &s.checks {
             let on = is_checked(*hwnd);
-            match toggle {
-                Toggle::Claude => cfg.claude_enabled = on,
-                Toggle::Codex => cfg.codex_enabled = on,
-                Toggle::Item(id) => cfg.set_visible(id, on),
-                Toggle::Autostart => autostart_on = Some(on),
-                Toggle::KeepAliveClaude => {
-                    cfg.keep_claude_login = on;
-                    cfg.keepalive_asked = true;
-                }
-                Toggle::KeepAliveCodex => {
-                    cfg.keep_codex_login = on;
-                    cfg.codex_keepalive_asked = true;
-                }
+            if let Some(on) = apply_toggle(&mut cfg, toggle, on) {
+                autostart_on = Some(on);
             }
         }
         cfg.hw_interval_secs = read_number(s.hw_edit, cfg.hw_interval_secs);
