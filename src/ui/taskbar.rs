@@ -10,7 +10,8 @@ use windows::Win32::System::Registry::{HKEY_CURRENT_USER, RRF_RT_REG_DWORD, RegG
 use windows::Win32::System::SystemInformation::OSVERSIONINFOW;
 use windows::Win32::System::Variant::VARIANT;
 use windows::Win32::UI::Accessibility::{
-    CUIAutomation, IUIAutomation, TreeScope_Descendants, UIA_AutomationIdPropertyId,
+    CUIAutomation, IUIAutomation, IUIAutomationElement, TreeScope_Descendants,
+    UIA_AutomationIdPropertyId,
 };
 use windows::Win32::UI::HiDpi::GetDpiForWindow;
 use windows::Win32::UI::Shell::{ABM_GETSTATE, ABS_AUTOHIDE, APPBARDATA, SHAppBarMessage};
@@ -203,22 +204,85 @@ fn windows_build() -> Option<u32> {
     Some(info.dwBuildNumber)
 }
 
-fn start_button_left(taskbar: HWND) -> Option<i32> {
-    // SAFETY: COM is initialized on the UI thread by main; all calls are on that thread.
-    unsafe {
-        let uia: IUIAutomation =
-            CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER).ok()?;
-        let root = uia.ElementFromHandle(taskbar).ok()?;
-        let cond = uia
-            .CreatePropertyCondition(
-                UIA_AutomationIdPropertyId,
-                &VARIANT::from(BSTR::from("StartButton")),
-            )
-            .ok()?;
-        let start = root.FindFirst(TreeScope_Descendants, &cond).ok()?;
-        let rect = start.CurrentBoundingRectangle().ok()?;
-        (rect.right > rect.left).then_some(rect.left)
+/// Warm reads of the Start button's rectangle allowed before the element is searched for
+/// again, in case the taskbar rebuilt its buttons without invalidating the old one.
+const FULL_FIND_EVERY: u32 = 30;
+
+/// UI Automation objects kept between lookups (#86): creating the client and searching the
+/// taskbar tree costs ~14 ms, re-reading the Start button's rectangle a fraction of that.
+#[derive(Default)]
+struct StartButton {
+    uia: Option<IUIAutomation>,
+    /// The taskbar window the element was found under.
+    taskbar: isize,
+    element: Option<IUIAutomationElement>,
+    warm_reads: u32,
+}
+
+/// Whether the Start button must be searched for instead of re-read.
+fn needs_full_find(has_element: bool, same_taskbar: bool, warm_reads: u32) -> bool {
+    !has_element || !same_taskbar || warm_reads >= FULL_FIND_EVERY
+}
+
+fn left_edge(element: &IUIAutomationElement) -> Option<i32> {
+    // SAFETY: a live cross-process property read; it fails once the element is gone.
+    let rect = unsafe { element.CurrentBoundingRectangle() }.ok()?;
+    (rect.right > rect.left).then_some(rect.left)
+}
+
+impl StartButton {
+    fn find(&mut self, taskbar: HWND) -> Option<i32> {
+        // SAFETY: COM is initialized on the UI thread by main; all calls are on that thread.
+        unsafe {
+            if self.uia.is_none() {
+                self.uia = CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER).ok();
+            }
+            let uia = self.uia.as_ref()?;
+            let root = uia.ElementFromHandle(taskbar).ok()?;
+            let cond = uia
+                .CreatePropertyCondition(
+                    UIA_AutomationIdPropertyId,
+                    &VARIANT::from(BSTR::from("StartButton")),
+                )
+                .ok()?;
+            let start = root.FindFirst(TreeScope_Descendants, &cond).ok()?;
+            let left = left_edge(&start)?;
+            self.element = Some(start);
+            self.taskbar = taskbar.0 as isize;
+            self.warm_reads = 0;
+            Some(left)
+        }
     }
+
+    fn left(&mut self, taskbar: HWND) -> Option<i32> {
+        let same_taskbar = self.taskbar == taskbar.0 as isize;
+        if !needs_full_find(self.element.is_some(), same_taskbar, self.warm_reads)
+            && let Some(left) = self.element.as_ref().and_then(left_edge)
+        {
+            self.warm_reads += 1;
+            return Some(left);
+        }
+        self.element = None;
+        let found = self.find(taskbar);
+        if found.is_none() {
+            // Start from a new client next time; a failed one may be tied to a dead Explorer.
+            self.uia = None;
+        }
+        found
+    }
+}
+
+thread_local! {
+    static START_BUTTON: std::cell::Cell<Option<StartButton>> = const { std::cell::Cell::new(None) };
+}
+
+fn start_button_left(taskbar: HWND) -> Option<i32> {
+    // UI Automation can pump messages, so a render can re-enter this lookup. The cache is
+    // taken out for the call: a nested lookup starts cold instead of sharing it.
+    let mut cache = START_BUTTON.take().unwrap_or_default();
+    let left = cache.left(taskbar);
+    START_BUTTON.set(Some(cache));
+    left
 }
 
 pub fn taskbar_hwnd() -> Option<HWND> {
@@ -438,6 +502,25 @@ mod live {
         let info = super::query(true).expect("taskbar");
         println!("{info:?} available={}", super::available_width(&info, 8));
         assert!(info.rect.width() > 0 && info.dpi >= 96);
+    }
+}
+
+#[cfg(test)]
+mod start_button_tests {
+    use super::{FULL_FIND_EVERY, needs_full_find};
+
+    #[test]
+    fn a_known_button_on_the_same_taskbar_is_only_re_read() {
+        assert!(!needs_full_find(true, true, 0));
+        assert!(!needs_full_find(true, true, FULL_FIND_EVERY - 1));
+    }
+
+    #[test]
+    fn the_button_is_searched_for_when_unknown_moved_or_due() {
+        assert!(needs_full_find(false, true, 0));
+        // Explorer restarted: the taskbar is a new window.
+        assert!(needs_full_find(true, false, 0));
+        assert!(needs_full_find(true, true, FULL_FIND_EVERY));
     }
 }
 
