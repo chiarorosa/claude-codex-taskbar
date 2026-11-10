@@ -41,7 +41,6 @@ NAV = {
     "en": [("home", "", "Home"), ("claude", "claude-code-usage-windows/", "Claude usage"),
            ("codex", "codex-usage-limits-windows/", "Codex usage"),
            ("accounts", "switch-claude-code-accounts/", "Switch accounts"),
-           ("alternatives", "alternatives/", "Alternatives"),
            ("changelog", "changelog/", "Changelog"), ("contribute", "contribute/", "Contribute")],
     "pt-BR": [("home", "pt-br/", "Início"), ("claude", "claude-code-usage-windows/", "Uso do Claude (en)"),
               ("accounts", "switch-claude-code-accounts/", "Trocar contas (en)"),

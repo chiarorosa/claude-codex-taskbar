@@ -161,7 +161,7 @@ class FullBuild(unittest.TestCase):
 
     def test_every_page_is_well_formed(self):
         files = list(self.out.rglob("*.html"))
-        self.assertGreaterEqual(len(files), 9)
+        self.assertGreaterEqual(len(files), 8)
         for f in files:
             c = _Checker()
             c.feed(f.read_text(encoding="utf-8"))
