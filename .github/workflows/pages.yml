@@ -67,3 +67,13 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+
+  indexnow:
+    # Ping Bing and the other IndexNow engines after real content changes, not on the weekly refresh.
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Submit the sitemap URLs
+        run: python3 site/indexnow.py

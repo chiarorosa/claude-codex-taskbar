@@ -207,5 +207,26 @@ class FullBuild(unittest.TestCase):
         self.assertNotIn("404", (self.out / "sitemap.xml").read_text(encoding="utf-8"))
 
 
+class IndexNow(unittest.TestCase):
+    def test_one_valid_key_file_ships_with_the_site(self):
+        import indexnow
+        key = indexnow.find_key(build.HERE / "static")
+        self.assertRegex(key, r"^[0-9a-f]{32}$")
+
+    def test_payload_keeps_only_site_urls(self):
+        import indexnow
+        xml = ("<urlset><url><loc>https://chiarorosa.github.io/claude-codex-taskbar/</loc></url>"
+               "<url><loc>https://example.com/x</loc></url></urlset>")
+        body = indexnow.payload("a" * 32, indexnow.sitemap_urls(xml))
+        self.assertEqual(body["host"], "chiarorosa.github.io")
+        self.assertEqual(body["keyLocation"], f"{build.SITE_URL}/{'a' * 32}.txt")
+        self.assertEqual(body["urlList"], [f"{build.SITE_URL}/"])
+
+    def test_empty_sitemap_is_an_error(self):
+        import indexnow
+        with self.assertRaises(ValueError):
+            indexnow.payload("a" * 32, [])
+
+
 if __name__ == "__main__":
     unittest.main()
