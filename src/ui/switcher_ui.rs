@@ -4,6 +4,7 @@
 use super::accounts::{
     AccountMenu, account_menu, last_seen_from, live_state, save_error_text, switch_error_text,
 };
+use super::menu::{escape, text as menu_text};
 use crate::i18n::{Key, Lang, fmt, t};
 use crate::limits::switcher::sessions::busy_now;
 use crate::limits::switcher::store::{LastSeen, Store, claude_label, read_live};
@@ -95,32 +96,47 @@ pub unsafe fn append_submenu(parent: HMENU, model: &AccountMenu, lang: Lang) {
             if !e.enabled {
                 flags |= MF_GRAYED | MF_DISABLED;
             }
-            add(sub, flags, CMD_SWITCH_BASE + e.id as usize, &e.label);
+            add(
+                sub,
+                flags,
+                CMD_SWITCH_BASE + e.id as usize,
+                &escape(&e.label),
+            );
         }
         for note in [&model.unsaved_note, &model.hint].into_iter().flatten() {
-            add(sub, disabled, 0, note);
+            add(sub, disabled, 0, &escape(note));
         }
         let _ = AppendMenuW(sub, MF_SEPARATOR, 0, PCWSTR::null());
         let save_flags = if model.can_save { MF_STRING } else { disabled };
-        add(sub, save_flags, CMD_SAVE, t(lang, Key::MenuSaveAccount));
+        add(
+            sub,
+            save_flags,
+            CMD_SAVE,
+            &menu_text(lang, Key::MenuSaveAccount),
+        );
         if !model.removable.is_empty()
             && let Ok(remove) = CreatePopupMenu()
         {
             for (id, email) in &model.removable {
-                add(remove, MF_STRING, CMD_REMOVE_BASE + *id as usize, email);
+                add(
+                    remove,
+                    MF_STRING,
+                    CMD_REMOVE_BASE + *id as usize,
+                    &escape(email),
+                );
             }
             add(
                 sub,
                 MF_POPUP,
                 remove.0 as usize,
-                t(lang, Key::MenuRemoveAccount),
+                &menu_text(lang, Key::MenuRemoveAccount),
             );
         }
         add(
             parent,
             MF_POPUP,
             sub.0 as usize,
-            t(lang, Key::MenuClaudeAccount),
+            &menu_text(lang, Key::MenuClaudeAccount),
         );
     }
 }

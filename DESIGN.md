@@ -68,6 +68,12 @@ The strip keeps its own palette in `render.rs` (bar colors from `model::bar_colo
 - **Focus:** a 2 px rounded ring in the text color around the focused switch or chip, only
   while keyboard cues are on; fields use a 2 px accent underline.
 - **Changes apply immediately.** No OK/Cancel; Esc closes.
+- **Right-click menu** (native `TrackPopupMenu`, built from `src/ui/menu.rs`): groups split by
+  separators (actions, Claude account, preferences, Exit); the default item in bold matches
+  the double-click (Refresh now); `…` on items that open a window; one access key per item,
+  the English letter in every language, unique within its menu, and also shown in the
+  shortcut column (Windows hides the underline in a menu opened with the mouse); `&` in data
+  (emails, labels) is escaped. The strip never raises itself while its menu is open.
 
 ## Don'ts
 

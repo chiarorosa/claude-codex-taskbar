@@ -1,7 +1,6 @@
 //! The strip window: creation, message handling, timers, tooltip and context menu.
 
 use super::app::{App, spawn_worker};
-use crate::i18n::{Key, t};
 use std::cell::RefCell;
 use std::sync::atomic::{AtomicIsize, Ordering};
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, WPARAM};
@@ -19,11 +18,11 @@ use windows::Win32::UI::WindowsAndMessaging::{
     MB_ICONQUESTION, MB_SETFOREGROUND, MB_YESNO, MF_CHECKED, MF_SEPARATOR, MF_STRING, MSG,
     MessageBoxW, PBT_APMRESUMEAUTOMATIC, PostMessageW, PostQuitMessage, RegisterClassExW,
     RegisterWindowMessageW, SW_HIDE, SW_SHOWNOACTIVATE, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
-    SendMessageW, SetForegroundWindow, SetTimer, SetWindowPos, ShowWindow, TPM_BOTTOMALIGN,
-    TPM_RETURNCMD, TPM_RIGHTBUTTON, TrackPopupMenu, TranslateMessage, WINEVENT_OUTOFCONTEXT,
-    WM_APP, WM_DESTROY, WM_DISPLAYCHANGE, WM_DPICHANGED, WM_LBUTTONDBLCLK, WM_NOTIFY,
-    WM_POWERBROADCAST, WM_RBUTTONUP, WM_SETTINGCHANGE, WM_TIMER, WNDCLASSEXW, WS_EX_LAYERED,
-    WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP,
+    SendMessageW, SetForegroundWindow, SetMenuDefaultItem, SetTimer, SetWindowPos, ShowWindow,
+    TPM_BOTTOMALIGN, TPM_RETURNCMD, TPM_RIGHTBUTTON, TrackPopupMenu, TranslateMessage,
+    WINEVENT_OUTOFCONTEXT, WM_APP, WM_DESTROY, WM_DISPLAYCHANGE, WM_DPICHANGED, WM_LBUTTONDBLCLK,
+    WM_NOTIFY, WM_POWERBROADCAST, WM_RBUTTONUP, WM_SETTINGCHANGE, WM_TIMER, WNDCLASSEXW,
+    WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP,
 };
 use windows::core::{PCWSTR, PWSTR, w};
 
@@ -40,11 +39,9 @@ const TIMER_RESET: usize = 4;
 const TOPMOST_MS: u32 = 2000;
 const DISKS_MS: u32 = 30_000;
 
-const CMD_SETTINGS: usize = 1;
-const CMD_REFRESH: usize = 2;
-const CMD_AUTOSTART: usize = 3;
-const CMD_EXIT: usize = 4;
-const CMD_COPY: usize = 5;
+use super::menu::{
+    CMD_AUTOSTART, CMD_COPY, CMD_EXIT, CMD_REFRESH, CMD_SETTINGS, DEFAULT_CMD, Entry,
+};
 
 mod notifications;
 
@@ -130,24 +127,29 @@ fn show_menu(hwnd: HWND) {
     // SAFETY: menu is created, tracked and destroyed here; the app is not borrowed meanwhile.
     let cmd = unsafe {
         let Ok(menu) = CreatePopupMenu() else { return };
-        let item = |id: usize, key: Key, checked: bool| {
-            let text = wide_z(t(lang, key));
-            let flags = if checked {
-                MF_STRING | MF_CHECKED
-            } else {
-                MF_STRING
-            };
-            let _ = AppendMenuW(menu, flags, id, PCWSTR(text.as_ptr()));
-        };
-        item(CMD_SETTINGS, Key::MenuSettings, false);
-        item(CMD_REFRESH, Key::MenuRefresh, false);
-        item(CMD_COPY, Key::MenuCopyUsage, false);
-        if let Some(model) = &accounts {
-            super::switcher_ui::append_submenu(menu, model, lang);
+        for entry in super::menu::entries(lang, autostart, accounts.is_some()) {
+            match entry {
+                Entry::Command { id, text, checked } => {
+                    let text = wide_z(&text);
+                    let flags = if checked {
+                        MF_STRING | MF_CHECKED
+                    } else {
+                        MF_STRING
+                    };
+                    let _ = AppendMenuW(menu, flags, id, PCWSTR(text.as_ptr()));
+                }
+                Entry::Accounts => {
+                    if let Some(model) = &accounts {
+                        super::switcher_ui::append_submenu(menu, model, lang);
+                    }
+                }
+                Entry::Separator => {
+                    let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
+                }
+            }
         }
-        item(CMD_AUTOSTART, Key::MenuAutostart, autostart);
-        let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
-        item(CMD_EXIT, Key::MenuExit, false);
+        // Bold, like the double-click on the strip (#48).
+        let _ = SetMenuDefaultItem(menu, DEFAULT_CMD as u32, 0);
         let mut pt = POINT::default();
         let _ = GetCursorPos(&mut pt);
         // Required so the menu closes when clicking elsewhere.
