@@ -12,6 +12,17 @@ All notable changes to this project are documented here. The format follows
   errors still show `—` (#31, #80, thanks @DiulioAires).
 
 ### Changed
+- **About 38% smaller.** The release `.exe` drops from ~973 KB to ~607 KB: usage requests now go
+  through Windows' own WinHTTP instead of the bundled `ureq` HTTP and TLS stack. TLS is still
+  the system's (Schannel and the Windows certificate store), and every rule the old client had
+  is kept and tested: HTTPS only, no redirects, certificate checks always on, the same status
+  handling, no headers in error text, and the same `ALL_PROXY` / `HTTPS_PROXY` / `HTTP_PROXY` /
+  `NO_PROXY` proxy settings, including `user:password@` for proxies that ask for it.
+  - TLS 1.2 or newer only.
+  - A proxy variable with a scheme WinHTTP can't use (`socks5://`, `https://`) now fails the
+    request instead of quietly going direct.
+  - A server that accepts the connection and never answers ends the request in at most ~12 s
+    (WinHTTP rounds its timeouts to ~4 s steps) instead of exactly 10 s (#83).
 - **Right-click menu.** Items are grouped (Refresh now and Copy usage; Claude account;
   Settings… and Start with Windows; Exit), Refresh now is the bold default like the
   double-click, and every item has a one-letter shortcut shown on its right. The letters are
