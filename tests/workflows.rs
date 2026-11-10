@@ -209,7 +209,13 @@ fn line_index(text: &str, pred: impl Fn(&str) -> bool) -> Option<usize> {
 
 #[test]
 fn binary_size_is_checked_after_the_release_build() {
-    for (path, text) in workflows() {
+    let mut checked = 0;
+    // Only workflows that build the app; pages.yml builds the website and runs no cargo.
+    for (path, text) in workflows()
+        .into_iter()
+        .filter(|(_, text)| !cargo_commands(text).is_empty())
+    {
+        checked += 1;
         let build = line_index(&text, |l| {
             l.trim_start_matches("run:").trim() == "cargo build --release --locked"
         })
@@ -227,6 +233,10 @@ fn binary_size_is_checked_after_the_release_build() {
             path.display()
         );
     }
+    assert!(
+        checked >= 2,
+        "ci.yml and release.yml must both check the size"
+    );
 }
 
 #[test]
