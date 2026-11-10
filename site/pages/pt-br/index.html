@@ -1,15 +1,18 @@
 <!--
-{"title": "CCT: uso do Claude Code e do Codex na barra de tarefas do Windows",
- "h1": "Uso do Claude Code e do Codex direto na barra de tarefas do Windows",
- "description": "Widget gratuito para Windows 11/10: veja os limites de 5 horas e semanal do Claude Code e do Codex, qual conta está ativa, e troque de conta em três cliques.",
+{"title": "CCT: uso e troca de contas do Claude Code e Codex no Windows",
+ "h1": "Conta pessoal ou conta do trabalho?",
+ "description": "Conta pessoal ou do trabalho? Saiba sempre em qual conta do Claude Code / Codex você está, quanto resta da cota, e troque em 3 cliques na barra de tarefas.",
  "path": "pt-br/", "lang": "pt-BR", "kind": "home", "nav": "home",
  "alternates": {"en": "", "pt-BR": "pt-br/"}}
 -->
 <section class="wrap hero">
   <div>
-    <p class="eyebrow">Gratuito · código aberto · Windows 11 / 10</p>
-    <h1>Uso do Claude Code e do Codex direto na barra de tarefas do Windows</h1>
-    <p class="lead">Veja os limites de 5 horas e semanal da conta em uso, saiba num relance se é a conta <strong>pessoal</strong> ou a do <strong>trabalho</strong>, e troque de conta do Claude Code em três cliques. Um único <code>.exe</code> nativo com menos de 1&nbsp;MB.</p>
+    <p class="eyebrow">Claude Code e Codex · barra de tarefas do Windows 11 / 10</p>
+    <h1>Conta pessoal ou conta do trabalho?</h1>
+    <p class="lead">Saiba sempre <strong>em qual conta do Claude Code / Codex</strong> você está, <strong>quanto resta da cota</strong>, e <strong>troque de conta em três cliques</strong>, direto da barra de tarefas.</p>
+    <ul class="pillars-inline" aria-label="Três pilares">
+      <li>grátis para sempre</li><li>pequeno sempre</li><li>a 3 cliques</li>
+    </ul>
     <div class="cta">
       <a class="btn primary" href="{{release_url}}">Baixar {{version}} para Windows</a>
       <a class="btn" href="{{repo_url}}"><span aria-hidden="true">★</span> Estrela no GitHub {{star_count}}</a>
@@ -28,6 +31,15 @@
          alt="A faixa do CCT no canto esquerdo da barra de tarefas do Windows 11: rótulo da conta, medidores do Claude e do Codex, CPU, RAM, GPU e disco">
   </figure>
   <p class="muted" style="font-size:.92rem">A faixa fica no canto esquerdo da barra de tarefas do Windows 11: rótulo da conta, medidores do Claude e do Codex, e depois CPU, RAM, GPU e discos.</p>
+</section>
+
+<section class="wrap section" aria-labelledby="pilares">
+  <h2 id="pilares" class="visually-hidden">Três pilares</h2>
+  <div class="grid">
+    <div class="card"><p class="sticker">grátis para sempre</p><h3>Gratuito e aberto, para sempre</h3><p>Licença MIT. Sem plano pago, sem cadastro, sem anúncios, sem versão “pro”. Nunca.</p></div>
+    <div class="card"><p class="sticker">pequeno sempre</p><h3>Pequeno, com zero telemetria</h3><p>Um <code>.exe</code> nativo em Rust com menos de 1&nbsp;MB: sem runtime, sem instalador, cerca de 15&nbsp;MB de RAM e CPU quase zero. Nada sobre você ou seu uso chega aos mantenedores.</p></div>
+    <div class="card"><p class="sticker hot">a 3 cliques</p><h3>Troque de conta em três cliques</h3><p>Clique direito na faixa → <strong>Conta do Claude</strong> → escolha uma. Sem <code>/logout</code>, sem <code>/login</code>, sem reiniciar. Toda troca é um clique seu, nunca automática.</p></div>
+  </div>
 </section>
 
 <section class="wrap section">
@@ -68,13 +80,7 @@
 </section>
 
 <section class="wrap section">
-  <h2>Três promessas</h2>
-  <div class="grid">
-    <div class="card"><h3>Gratuito e aberto, para sempre</h3><p>Licença MIT. Sem plano pago, sem cadastro, sem anúncios, sem versão “pro”.</p></div>
-    <div class="card"><h3>Pequeno, sempre</h3><p>Um <code>.exe</code> nativo com menos de 1&nbsp;MB, escrito em Rust (Win32 + Direct2D). Sem runtime, sem instalador, cerca de 15&nbsp;MB de RAM e CPU quase zero.</p></div>
-    <div class="card"><h3>Privado e sob seu controle</h3><p>Zero telemetria, para sempre. Toda troca de conta é um clique manual seu.</p></div>
-  </div>
-  <div class="note">
+  <div class="note" style="margin-top:0">
     <strong>Dentro das regras da Anthropic e da OpenAI.</strong> O CCT dá visibilidade e conveniência; não serve para contornar limites. Ele nunca troca de conta sozinho, nunca faz rodízio de contas quando o limite acaba, nunca renova tokens por conta própria e só salva planos pagos do Claude (Pro, Max, Team, Enterprise) que sejam seus.
   </div>
 </section>

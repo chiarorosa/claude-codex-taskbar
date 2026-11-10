@@ -104,6 +104,20 @@ p, li { text-wrap: pretty; }
 figcaption { color: var(--muted); font-size: .92rem; margin-top: .6rem; }
 .shot { padding-bottom: 1rem; }
 
+/* The three pillars, styled like the stickers in docs/hero-accounts.svg (same colors in both themes). */
+.pillars-inline { list-style: none; padding: 0; margin: 1.5rem 0 0; display: flex; flex-wrap: wrap; gap: .75rem; }
+.pillars-inline li, .sticker {
+  display: inline-block; font: 700 .95rem/1 var(--mono); color: #1D1D1B; background: #FFFDF8;
+  border: 2px solid #1D1D1B; padding: .55rem .8rem; box-shadow: 4px 4px 0 #2F5FD0;
+}
+.pillars-inline li:nth-child(1) { rotate: -1.5deg; }
+.pillars-inline li:nth-child(2) { rotate: 1deg; }
+.pillars-inline li:nth-child(3) { rotate: -.5deg; }
+/* #C8402B keeps white text above 4.5:1. */
+.pillars-inline li:nth-child(3), .sticker.hot { background: #C8402B; color: #FFFDF8; }
+.sticker { margin: 0 0 1rem; rotate: -1deg; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
 /* sections */
 .section { padding-block: 3rem; }
 .section + .section { border-top: 2px dashed var(--soft); }

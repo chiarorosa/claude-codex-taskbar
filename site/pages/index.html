@@ -1,15 +1,18 @@
 <!--
-{"title": "CCT: Claude Code & Codex usage monitor for the Windows taskbar",
- "h1": "Claude Code & Codex usage, right on your Windows taskbar",
- "description": "Free Windows 11/10 taskbar widget: see your Claude Code and Codex 5-hour and weekly limits, which account is active, and switch accounts in three clicks.",
+{"title": "CCT: Claude Code & Codex usage and account switcher for Windows",
+ "h1": "Personal account or work account?",
+ "description": "Personal or work account? Always know which Claude Code / Codex account you are on, how much quota is left, and switch in 3 clicks from the Windows taskbar.",
  "path": "", "lang": "en", "kind": "home", "nav": "home",
  "alternates": {"en": "", "pt-BR": "pt-br/"}}
 -->
 <section class="wrap hero">
   <div>
-    <p class="eyebrow">Free · open source · Windows 11 / 10</p>
-    <h1>Claude Code &amp; Codex usage, right on your Windows taskbar</h1>
-    <p class="lead">See the 5-hour and weekly limits of the account you are on, know at a glance whether it is your <strong>personal</strong> or <strong>work</strong> login, and switch Claude Code accounts in three clicks. One native <code>.exe</code> under 1&nbsp;MB.</p>
+    <p class="eyebrow">Claude Code &amp; Codex · Windows 11 / 10 taskbar</p>
+    <h1>Personal account or work account?</h1>
+    <p class="lead">Always know <strong>which Claude Code / Codex account</strong> you are on, <strong>how much of its quota is left</strong>, and <strong>switch between your accounts in three clicks</strong>, right from your taskbar.</p>
+    <ul class="pillars-inline" aria-label="Three pillars">
+      <li>free forever</li><li>tiny always</li><li>3 clicks away</li>
+    </ul>
     <div class="cta">
       <a class="btn primary" href="{{release_url}}">Download {{version}} for Windows</a>
       <a class="btn" href="{{repo_url}}"><span aria-hidden="true">★</span> Star on GitHub {{star_count}}</a>
@@ -28,6 +31,15 @@
          alt="The CCT strip on the left corner of the Windows 11 taskbar: account label, Claude and Codex usage gauges, then CPU, RAM, GPU and disk">
   </figure>
   <p class="muted" style="font-size:.92rem">The strip lives in the left corner of the Windows 11 taskbar: account label, Claude and Codex gauges, then CPU, RAM, GPU and disks.</p>
+</section>
+
+<section class="wrap section" aria-labelledby="pillars">
+  <h2 id="pillars" class="visually-hidden">Three pillars</h2>
+  <div class="grid">
+    <div class="card"><p class="sticker">free forever</p><h3>Free and open source, forever</h3><p>MIT licensed. No paid tier, no account, no ads, no “pro” version. Ever.</p></div>
+    <div class="card"><p class="sticker">tiny always</p><h3>Tiny, with zero telemetry</h3><p>One native <code>.exe</code> under 1&nbsp;MB, written in Rust: no runtime, no installer, about 15&nbsp;MB of RAM and near-zero CPU. Nothing about you or your usage ever reaches the maintainers.</p></div>
+    <div class="card"><p class="sticker hot">3 clicks away</p><h3>Switch accounts in three clicks</h3><p>Right-click the strip → <strong>Claude account</strong> → pick one. No <code>/logout</code>, no <code>/login</code>, no restart. Every switch is a click by you, never automatic.</p></div>
+  </div>
 </section>
 
 <section class="wrap section">
@@ -68,13 +80,7 @@
 </section>
 
 <section class="wrap section">
-  <h2>Three promises</h2>
-  <div class="grid">
-    <div class="card"><h3>Free and open source, forever</h3><p>MIT licensed. No paid tier, no account, no ads, no “pro” version.</p></div>
-    <div class="card"><h3>Tiny, always</h3><p>One native <code>.exe</code> under 1&nbsp;MB, written in Rust (raw Win32 + Direct2D). No runtime, no installer, about 15&nbsp;MB of RAM and near-zero CPU.</p></div>
-    <div class="card"><h3>Private and in your hands</h3><p>Zero telemetry, forever: nothing about you or your usage reaches the maintainers. Every account switch is a manual click by you.</p></div>
-  </div>
-  <div class="note">
+  <div class="note" style="margin-top:0">
     <strong>Within Anthropic's and OpenAI's rules.</strong> CCT is a visibility and convenience tool, not a way around limits. It never switches accounts on its own, never rotates accounts when a limit is reached, never refreshes tokens itself, and only saves paid Claude plans (Pro, Max, Team, Enterprise) that are yours.
   </div>
 </section>
