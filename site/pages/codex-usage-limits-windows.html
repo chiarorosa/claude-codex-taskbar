@@ -1,0 +1,62 @@
+<!--
+{"title": "How to check your OpenAI Codex usage limits on Windows",
+ "h1": "How to check your OpenAI Codex usage limits on Windows",
+ "description": "See your Codex CLI 5-hour and weekly usage limits on Windows 11 and 10: the /status command, or a live gauge on the taskbar next to Claude Code.",
+ "path": "codex-usage-limits-windows/", "lang": "en", "kind": "article", "nav": "codex",
+ "published": "2026-11-10"}
+-->
+<article class="wrap narrow article">
+  <p class="crumbs"><a href="{{root}}">CCT</a> / Guides</p>
+  <h1>How to check your OpenAI Codex usage limits on Windows</h1>
+  <p class="byline">By Pablo Chiaro Rosa, maintainer of CCT · Updated <time datetime="{{modified}}">{{modified_human}}</time></p>
+
+  <p class="answer"><strong>Short answer:</strong> run <code>/status</code> inside the Codex CLI to see your current 5-hour and weekly usage. To keep them on screen, run <a href="{{root}}">CCT</a>: it shows the Codex limits of your current <code>codex</code> login on the Windows taskbar, next to Claude Code, refreshed every 2 minutes.</p>
+
+  <h2>What the Codex limits are</h2>
+  <p>When you sign in to the Codex CLI with a ChatGPT plan, Codex usage is metered in a <strong>5-hour window</strong> and a <strong>weekly window</strong>, much like Claude Code. The limits are tied to the ChatGPT account you signed in with, so a personal and a work account each have their own.</p>
+
+  <h2>Two ways to check on Windows</h2>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th scope="col">Method</th><th scope="col">Where</th><th scope="col">Always visible</th><th scope="col">Claude Code in the same place</th><th scope="col">Alerts</th></tr></thead>
+      <tbody>
+        <tr><th scope="row"><code>/status</code> in Codex</th><td>Inside a Codex session</td><td class="n">No, only when you ask</td><td class="n">No</td><td class="n">No</td></tr>
+        <tr class="us"><th scope="row">CCT on the taskbar</th><td>Windows 11 taskbar</td><td class="y">Yes, refreshed every 2 min</td><td class="y">Yes, side by side</td><td class="y">Opt-in at 80% / 95%</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Set it up</h2>
+  <ol class="steps">
+    <li>Sign in to the Codex CLI with your ChatGPT account on the same Windows user (<code>codex</code>, then follow the login).</li>
+    <li>Download CCT from the <a href="{{release_url}}">latest release</a>, extract <code>claude-codex-taskbar.exe</code> to a permanent folder and run it.</li>
+    <li>In Settings, keep the <strong>Codex</strong> switch on. Turn Claude Code off if you only use Codex.</li>
+    <li>Right-click the strip → <strong>Start with Windows</strong>.</li>
+  </ol>
+
+  <h2>How CCT reads Codex usage</h2>
+  <ul>
+    <li><strong>Read-only login.</strong> CCT reads the login the Codex CLI saved in <code>~/.codex/auth.json</code> and never writes it or refreshes its token.</li>
+    <li><strong>Offline fallback.</strong> If the usage endpoint fails, CCT asks the installed <code>codex</code> CLI for its rate limits, and as a last resort uses the newest limit the CLI recorded in its own session logs, if that window has not reset yet.</li>
+    <li><strong>Honest errors.</strong> When nothing works, the gauge shows <code>—</code> with the reason in the tooltip, never a fake <code>0%</code>.</li>
+    <li><strong>Your label.</strong> A short tag such as <code>P</code> or <code>W</code> sits before the Codex gauge in Codex blue, so you know which account the numbers belong to.</li>
+  </ul>
+
+  <h2>Questions</h2>
+  <details class="faq">
+    <summary>Can CCT switch between Codex accounts?</summary>
+    <p>Not yet. Switching works for Claude Code today; a Codex account switcher with the same rules (paid plans, manual only, encrypted locally) is on the roadmap.</p>
+  </details>
+  <details class="faq">
+    <summary>Does it need an OpenAI API key?</summary>
+    <p>No. It uses the ChatGPT login the Codex CLI already saved, the same one that carries the 5-hour and weekly limits.</p>
+  </details>
+  <details class="faq">
+    <summary>Is CCT made by OpenAI?</summary>
+    <p>No. CCT is an independent, MIT-licensed open-source project and is not affiliated with OpenAI.</p>
+  </details>
+
+  <div class="note">
+    <p style="margin:0"><strong>Next:</strong> <a href="{{root}}claude-code-usage-windows/">check Claude Code limits</a> · <a href="{{root}}alternatives/">compare usage monitors</a> · <a href="{{repo_url}}">★ star CCT on GitHub</a></p>
+  </div>
+</article>

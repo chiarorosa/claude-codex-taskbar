@@ -1,0 +1,69 @@
+name: Website
+
+# Builds site/ and publishes it to GitHub Pages:
+# https://chiarorosa.github.io/claude-codex-taskbar/
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - "docs/*.png"
+      - "docs/*.svg"
+      - "CHANGELOG.md"
+      - "llms.txt"
+      - ".github/workflows/pages.yml"
+  pull_request:
+    paths:
+      - "site/**"
+      - "CHANGELOG.md"
+      - ".github/workflows/pages.yml"
+  # release.yml runs this once a release is published, so the version, download size and
+  # changelog on the site follow every release without a manual step.
+  workflow_dispatch:
+  # Weekly refresh of the star count and the "help wanted" issue list.
+  schedule:
+    - cron: "17 6 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Full history and tags: page dates come from git and the version falls back to the last tag.
+          fetch-depth: 0
+      - name: Test the build script
+        run: python3 -m unittest discover -s site -v
+      - name: Build
+        run: python3 site/build.py --out _site
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          # Optional repository variables for Google Search Console and Bing Webmaster Tools.
+          GOOGLE_SITE_VERIFICATION: ${{ vars.GOOGLE_SITE_VERIFICATION }}
+          BING_SITE_VERIFICATION: ${{ vars.BING_SITE_VERIFICATION }}
+      - name: Upload
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: _site
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

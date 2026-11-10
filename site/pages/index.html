@@ -1,0 +1,151 @@
+<!--
+{"title": "CCT: Claude Code & Codex usage monitor for the Windows taskbar",
+ "h1": "Claude Code & Codex usage, right on your Windows taskbar",
+ "description": "Free Windows 11/10 taskbar widget: see your Claude Code and Codex 5-hour and weekly limits, which account is active, and switch accounts in three clicks.",
+ "path": "", "lang": "en", "kind": "home", "nav": "home",
+ "alternates": {"en": "", "pt-BR": "pt-br/"}}
+-->
+<section class="wrap hero">
+  <div>
+    <p class="eyebrow">Free · open source · Windows 11 / 10</p>
+    <h1>Claude Code &amp; Codex usage, right on your Windows taskbar</h1>
+    <p class="lead">See the 5-hour and weekly limits of the account you are on, know at a glance whether it is your <strong>personal</strong> or <strong>work</strong> login, and switch Claude Code accounts in three clicks. One native <code>.exe</code> under 1&nbsp;MB.</p>
+    <div class="cta">
+      <a class="btn primary" href="{{release_url}}">Download {{version}} for Windows</a>
+      <a class="btn" href="{{repo_url}}"><span aria-hidden="true">★</span> Star on GitHub {{star_count}}</a>
+    </div>
+    <p class="facts">{{exe_size}} · MIT license · zero telemetry · no installer · no admin rights</p>
+  </div>
+  <figure class="hero-art">
+    <img src="{{root}}img/hero-accounts.svg" width="600" height="618" fetchpriority="high"
+         alt="Ink drawing: a developer flips a wall switch from PERSONAL to WORK; the taskbar strip below shows the work account's Claude and Codex usage">
+  </figure>
+</section>
+
+<section class="wrap shot" aria-label="Screenshot">
+  <figure class="taskbar" style="margin:0">
+    <img src="{{root}}img/screenshot.png" width="467" height="46"
+         alt="The CCT strip on the left corner of the Windows 11 taskbar: account label, Claude and Codex usage gauges, then CPU, RAM, GPU and disk">
+  </figure>
+  <p class="muted" style="font-size:.92rem">The strip lives in the left corner of the Windows 11 taskbar: account label, Claude and Codex gauges, then CPU, RAM, GPU and disks.</p>
+</section>
+
+<section class="wrap section">
+  <div class="split">
+    <div>
+      <h2>The problem</h2>
+      <p>Many developers have more than one AI coding subscription: a personal Claude or ChatGPT plan and a work one paid by their company. In practice:</p>
+    </div>
+    <ul class="problem">
+      <li>You never quite know <strong>which account the CLI is logged in to</strong> right now.</li>
+      <li>You find out you were on the <strong>wrong account</strong> only after spending its quota, or your employer's.</li>
+      <li>Switching means <code>/logout</code>, <code>/login</code>, a browser round-trip, and hoping you picked the right one.</li>
+      <li>The 5-hour and weekly limits are <strong>per account</strong>, so a number without the account behind it tells you little.</li>
+    </ul>
+  </div>
+</section>
+
+<section class="wrap section">
+  <h2>What CCT does</h2>
+  <div class="grid">
+    <article class="card">
+      <span class="num">1</span>
+      <h3>Shows the active account's usage</h3>
+      <p>The 5-hour and weekly limits (% used, reset time) of the account logged in to Claude Code and to Codex, refreshed every 2 minutes. Limits belong to the account, so the numbers include the CLI, the desktop app and the web. <a href="{{root}}claude-code-usage-windows/">How it works</a></p>
+    </article>
+    <article class="card">
+      <span class="num">2</span>
+      <h3>Tells you which account is active</h3>
+      <p>A short label of your choice (<code>P</code> for personal, <code>W</code> for work) sits before the Claude and Codex gauges, in each service's color. Each saved Claude account keeps its own.</p>
+    </article>
+    <article class="card">
+      <span class="num">3</span>
+      <h3>Switches accounts in three clicks</h3>
+      <p>Right-click the strip → <strong>Claude account</strong> → pick one. No <code>/logout</code>, no <code>/login</code>, no restart: Claude Code uses the new login on its next request. <a href="{{root}}switch-claude-code-accounts/">How switching works</a></p>
+    </article>
+  </div>
+  <p>Plus a CPU, RAM, GPU and per-disk monitor, opt-in quota alerts at 80% and 95%, light and dark themes, and English and Brazilian Portuguese.</p>
+</section>
+
+<section class="wrap section">
+  <h2>Three promises</h2>
+  <div class="grid">
+    <div class="card"><h3>Free and open source, forever</h3><p>MIT licensed. No paid tier, no account, no ads, no “pro” version.</p></div>
+    <div class="card"><h3>Tiny, always</h3><p>One native <code>.exe</code> under 1&nbsp;MB, written in Rust (raw Win32 + Direct2D). No runtime, no installer, about 15&nbsp;MB of RAM and near-zero CPU.</p></div>
+    <div class="card"><h3>Private and in your hands</h3><p>Zero telemetry, forever: nothing about you or your usage reaches the maintainers. Every account switch is a manual click by you.</p></div>
+  </div>
+  <div class="note">
+    <strong>Within Anthropic's and OpenAI's rules.</strong> CCT is a visibility and convenience tool, not a way around limits. It never switches accounts on its own, never rotates accounts when a limit is reached, never refreshes tokens itself, and only saves paid Claude plans (Pro, Max, Team, Enterprise) that are yours.
+  </div>
+</section>
+
+<section class="wrap section" id="install">
+  <div class="split">
+    <div>
+      <h2>Install in a minute</h2>
+      <ol class="steps">
+        <li>Download <code>claude-codex-taskbar-{{version}}-x64.zip</code> from the <a href="{{release_url}}">latest release</a> and extract it.</li>
+        <li>Put <code>claude-codex-taskbar.exe</code> somewhere permanent, for example <code>%LOCALAPPDATA%\Programs\claude-codex-taskbar\</code>, and run it. No administrator rights needed.</li>
+        <li>Right-click the strip → <strong>Start with Windows</strong>.</li>
+      </ol>
+      <p><strong>Requirements:</strong> Windows 11 or Windows 10 (x64), and a logged-in Claude Code and/or Codex CLI on the same Windows user. Turn off the Windows Widgets button and keep taskbar icons centered: the strip lives in that left corner.</p>
+    </div>
+    <div>
+      <div class="note warn">
+        <p style="margin-top:0">Releases are not code-signed yet, so SmartScreen may warn: <strong>More info → Run anyway</strong>. Check the file against <code>SHA256SUMS.txt</code>, or verify its signed build provenance:</p>
+        <pre><code>gh attestation verify claude-codex-taskbar.exe --repo chiarorosa/claude-codex-taskbar</code></pre>
+      </div>
+      <img src="{{root}}img/screenshot-settings.png" width="450" height="862" loading="lazy" style="width:min(100%,300px);border:2px solid var(--line)"
+           alt="CCT Settings window in dark mode: Claude Code and Codex switches, items on the strip as chips, and general options">
+    </div>
+  </div>
+</section>
+
+<section class="wrap section narrow" id="faq">
+  <h2>Questions</h2>
+  <details class="faq">
+    <summary>How do I see my Claude Code and Codex usage limits on Windows?</summary>
+    <p>Run CCT. The strip shows the % used of the 5-hour and weekly windows, the same numbers as <code>/usage</code> in Claude Code and <code>/status</code> in Codex, refreshed every 2 minutes. Hover for reset times.</p>
+  </details>
+  <details class="faq">
+    <summary>How do I switch between my personal and work Claude Code accounts?</summary>
+    <p>Save each login once (Claude account → Save current account), then switch with three clicks: right-click the strip → Claude account → pick one. Both must be paid plans. Claude Code uses the new account from its next request, without a restart.</p>
+  </details>
+  <details class="faq">
+    <summary>Is switching accounts allowed by Anthropic?</summary>
+    <p>CCT only does what you would do by hand with <code>/logout</code> and <code>/login</code>, for accounts that are yours, and only when you click. It never switches automatically or rotates accounts to get around limits. Make sure your use follows each provider's terms.</p>
+  </details>
+  <details class="faq">
+    <summary>Does it need an API key or my password?</summary>
+    <p>No. It reuses the login that the official <code>claude</code> and <code>codex</code> CLIs already saved on your PC.</p>
+  </details>
+  <details class="faq">
+    <summary>Does CCT collect any data?</summary>
+    <p>No. Zero telemetry: no analytics, no crash reports, no update checks. It only talks to the providers' own usage endpoints, for the providers you enable.</p>
+  </details>
+  <details class="faq">
+    <summary>How much memory and CPU does it use?</summary>
+    <p>Under 16 MB of memory and near-zero CPU, with no disk or network activity between limit refreshes.</p>
+  </details>
+  <details class="faq">
+    <summary>Does it work on Windows 10, macOS or Linux?</summary>
+    <p>CCT runs on Windows 11 and Windows 10 (x64), but on Windows 10 the strip stays hidden for now (issue #10). A macOS version is coming soon; Linux is not supported yet.</p>
+  </details>
+  <details class="faq">
+    <summary>Is CCT an official Anthropic or OpenAI product?</summary>
+    <p>No. CCT is an independent open-source project. Usage data comes from the same unofficial endpoints the official CLIs use; when they change, CCT shows an error (—) instead of wrong numbers, never a fake 0%.</p>
+  </details>
+</section>
+
+<section class="band">
+  <div class="wrap split">
+    <div>
+      <h2>Built in the open</h2>
+      <p>CCT is made by one maintainer and a growing group of contributors. Bug reports, testing on your setup, translations and code are all welcome.</p>
+    </div>
+    <div class="cta">
+      <a class="btn" href="{{root}}contribute/">Start contributing</a>
+      <a class="btn" href="{{repo_url}}"><span aria-hidden="true">★</span> Star the repo {{star_count}}</a>
+    </div>
+  </div>
+</section>

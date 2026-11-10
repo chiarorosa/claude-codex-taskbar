@@ -9,6 +9,10 @@
 *.exp
 *.lib
 
+# Website build output (site/build.py)
+/_site/
+site/__pycache__/
+
 # rustfmt backups
 **/*.rs.bk
 

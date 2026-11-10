@@ -1,0 +1,80 @@
+<!--
+{"title": "How to check your Claude Code usage limits on Windows",
+ "h1": "How to check your Claude Code usage limits on Windows",
+ "description": "Three ways to see your Claude Code 5-hour and weekly limits on Windows 11 and 10: the /usage command, your account page, or a live gauge on the taskbar.",
+ "path": "claude-code-usage-windows/", "lang": "en", "kind": "article", "nav": "claude",
+ "published": "2026-11-10"}
+-->
+<article class="wrap narrow article">
+  <p class="crumbs"><a href="{{root}}">CCT</a> / Guides</p>
+  <h1>How to check your Claude Code usage limits on Windows</h1>
+  <p class="byline">By Pablo Chiaro Rosa, maintainer of CCT · Updated <time datetime="{{modified}}">{{modified_human}}</time></p>
+
+  <p class="answer"><strong>Short answer:</strong> type <code>/usage</code> inside Claude Code to get a snapshot of your 5-hour and weekly limits. To see them all the time without asking, run <a href="{{root}}">CCT</a>, a free taskbar widget that shows the % used of both windows for the account you are logged in to, refreshed every 2 minutes.</p>
+
+  <h2>What the Claude Code limits are</h2>
+  <p>Claude subscriptions (Pro, Max, Team, Enterprise) meter Claude Code in two windows:</p>
+  <ul>
+    <li><strong>5-hour window</strong>: a rolling session limit that resets a few hours after you start using it.</li>
+    <li><strong>Weekly window</strong>: a 7-day limit, with separate weekly figures for some models such as Opus and Sonnet.</li>
+  </ul>
+  <p>The limits belong to your <strong>account</strong>, not to one app. Usage from the Claude Code CLI, the Claude desktop app and claude.ai all counts against the same numbers. If you have a personal and a work account, each has its own limits, so the number only means something next to the account it belongs to.</p>
+
+  <h2>Three ways to check on Windows</h2>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th scope="col">Method</th><th scope="col">Where</th><th scope="col">Always visible</th><th scope="col">Shows the account</th><th scope="col">Alerts</th></tr></thead>
+      <tbody>
+        <tr><th scope="row"><code>/usage</code> in Claude Code</th><td>Inside a terminal session</td><td class="n">No, only when you ask</td><td class="n">No</td><td class="n">No</td></tr>
+        <tr><th scope="row">Usage page in your Claude settings</th><td>Browser, claude.ai</td><td class="n">No</td><td>Yes, the one signed in</td><td class="n">No</td></tr>
+        <tr class="us"><th scope="row">CCT on the taskbar</th><td>Windows 11 taskbar</td><td class="y">Yes, refreshed every 2 min</td><td class="y">Yes, with your label</td><td class="y">Opt-in at 80% / 95%</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Set up the taskbar gauge</h2>
+  <ol class="steps">
+    <li>Make sure Claude Code is logged in on your Windows user: run <code>claude</code> once and finish <code>/login</code>.</li>
+    <li>Download the zip from the <a href="{{release_url}}">latest CCT release</a>, extract <code>claude-codex-taskbar.exe</code> to a permanent folder and run it. No installer and no admin rights.</li>
+    <li>Turn off the Windows Widgets button (<em>Settings → Personalization → Taskbar → Widgets</em>) and keep icons centered: the strip appears in the left corner.</li>
+    <li>Right-click the strip → <strong>Start with Windows</strong> so it is there after every reboot.</li>
+  </ol>
+  <p>CCT reads the login Claude Code already saved, read-only. It needs no API key and no password, and it sends nothing anywhere except the usage request to Anthropic.</p>
+
+  <h2>Reading the strip</h2>
+  <ul>
+    <li><strong>The label</strong> (for example <code>P</code> or <code>W</code>) tells you which account the numbers belong to. Set it in Settings.</li>
+    <li><strong>Two gauges</strong> show the 5-hour and weekly % used. The bar uses the Claude color, turns amber from 75% and red from 90%.</li>
+    <li><strong>Hover</strong> for the reset times in your local time, the weekly Opus and Sonnet percentages, and a notice when extra usage is on.</li>
+    <li><strong><code>—</code> instead of a number</strong> means CCT could not read the limit (expired login, endpoint down). It never shows a fake <code>0%</code>; the tooltip says why.</li>
+    <li>Prefer to see what is <strong>left</strong>? Turn on “Show remaining” in Settings: <code>38%</code> left instead of <code>62%</code> used.</li>
+  </ul>
+  <img src="{{root}}img/screenshot-pc-usage.png" width="699" height="43" loading="lazy"
+       alt="Task Manager row for claude-codex-taskbar: 0% CPU and 14.5 MB of memory">
+  <p class="muted">CCT itself stays out of the way: about 15 MB of memory and near-zero CPU.</p>
+
+  <h2>Get warned before you hit the limit</h2>
+  <p>In Settings, turn on quota alerts. CCT shows a Windows notification when Claude (or Codex) usage crosses 80% or 95%; both thresholds are configurable. Alerts are skipped while you are in full screen and during quiet hours.</p>
+
+  <h2>Questions</h2>
+  <details class="faq">
+    <summary>Are the numbers the same as /usage?</summary>
+    <p>Yes. CCT reads the same usage data Claude Code shows with /usage, for the account currently logged in to the CLI.</p>
+  </details>
+  <details class="faq">
+    <summary>I use Claude Code through the desktop app. Does CCT see my login?</summary>
+    <p>CCT reads the Claude Code CLI login. When Claude Code is only used through the desktop app, the login may not be detected yet; this is tracked in issue #45. Logging in once with the CLI fixes it.</p>
+  </details>
+  <details class="faq">
+    <summary>I have two Claude accounts. Can I see both?</summary>
+    <p>The strip shows the active account. The Claude account menu lists every saved account with its plan and the usage last seen on it, and you can switch between them in three clicks.</p>
+  </details>
+  <details class="faq">
+    <summary>Is CCT made by Anthropic?</summary>
+    <p>No. CCT is an independent, MIT-licensed open-source project and is not affiliated with Anthropic.</p>
+  </details>
+
+  <div class="note">
+    <p style="margin:0"><strong>Next:</strong> <a href="{{root}}switch-claude-code-accounts/">switch between Claude Code accounts</a> · <a href="{{root}}codex-usage-limits-windows/">check Codex limits</a> · <a href="{{repo_url}}">★ star CCT on GitHub</a></p>
+  </div>
+</article>

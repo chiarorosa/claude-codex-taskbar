@@ -1,0 +1,127 @@
+<!--
+{"title": "CCT: uso do Claude Code e do Codex na barra de tarefas do Windows",
+ "h1": "Uso do Claude Code e do Codex direto na barra de tarefas do Windows",
+ "description": "Widget gratuito para Windows 11/10: veja os limites de 5 horas e semanal do Claude Code e do Codex, qual conta está ativa, e troque de conta em três cliques.",
+ "path": "pt-br/", "lang": "pt-BR", "kind": "home", "nav": "home",
+ "alternates": {"en": "", "pt-BR": "pt-br/"}}
+-->
+<section class="wrap hero">
+  <div>
+    <p class="eyebrow">Gratuito · código aberto · Windows 11 / 10</p>
+    <h1>Uso do Claude Code e do Codex direto na barra de tarefas do Windows</h1>
+    <p class="lead">Veja os limites de 5 horas e semanal da conta em uso, saiba num relance se é a conta <strong>pessoal</strong> ou a do <strong>trabalho</strong>, e troque de conta do Claude Code em três cliques. Um único <code>.exe</code> nativo com menos de 1&nbsp;MB.</p>
+    <div class="cta">
+      <a class="btn primary" href="{{release_url}}">Baixar {{version}} para Windows</a>
+      <a class="btn" href="{{repo_url}}"><span aria-hidden="true">★</span> Estrela no GitHub {{star_count}}</a>
+    </div>
+    <p class="facts">{{exe_size}} · licença MIT · zero telemetria · sem instalador · sem admin</p>
+  </div>
+  <figure class="hero-art">
+    <img src="{{root}}img/hero-accounts.svg" width="600" height="618" fetchpriority="high"
+         alt="Desenho a nanquim: uma pessoa vira um interruptor de PERSONAL para WORK; a faixa na barra de tarefas mostra o uso do Claude e do Codex da conta de trabalho">
+  </figure>
+</section>
+
+<section class="wrap shot" aria-label="Captura de tela">
+  <figure class="taskbar" style="margin:0">
+    <img src="{{root}}img/screenshot.png" width="467" height="46"
+         alt="A faixa do CCT no canto esquerdo da barra de tarefas do Windows 11: rótulo da conta, medidores do Claude e do Codex, CPU, RAM, GPU e disco">
+  </figure>
+  <p class="muted" style="font-size:.92rem">A faixa fica no canto esquerdo da barra de tarefas do Windows 11: rótulo da conta, medidores do Claude e do Codex, e depois CPU, RAM, GPU e discos.</p>
+</section>
+
+<section class="wrap section">
+  <div class="split">
+    <div>
+      <h2>O problema</h2>
+      <p>Muita gente tem mais de uma assinatura de IA para programar: um plano pessoal do Claude ou do ChatGPT e outro pago pela empresa. Na prática:</p>
+    </div>
+    <ul class="problem">
+      <li>Você nunca sabe direito <strong>em qual conta o CLI está logado</strong> agora.</li>
+      <li>Você descobre que estava na <strong>conta errada</strong> só depois de gastar a cota dela, ou a da empresa.</li>
+      <li>Trocar exige <code>/logout</code>, <code>/login</code>, uma ida ao navegador e torcer para escolher a conta certa.</li>
+      <li>Os limites de 5 horas e semanal são <strong>por conta</strong>: um número sem a conta por trás diz pouco.</li>
+    </ul>
+  </div>
+</section>
+
+<section class="wrap section">
+  <h2>O que o CCT faz</h2>
+  <div class="grid">
+    <article class="card">
+      <span class="num">1</span>
+      <h3>Mostra o uso da conta ativa</h3>
+      <p>Os limites de 5 horas e semanal (% usado, horário de reset) da conta logada no Claude Code e no Codex, atualizados a cada 2 minutos. O limite é da conta, então inclui o CLI, o app desktop e a web.</p>
+    </article>
+    <article class="card">
+      <span class="num">2</span>
+      <h3>Diz qual conta está ativa</h3>
+      <p>Um rótulo curto à sua escolha (<code>P</code> de pessoal, <code>W</code> de trabalho) aparece antes dos medidores do Claude e do Codex, na cor de cada serviço. Cada conta salva do Claude tem o seu.</p>
+    </article>
+    <article class="card">
+      <span class="num">3</span>
+      <h3>Troca de conta em três cliques</h3>
+      <p>Clique direito na faixa → <strong>Conta do Claude</strong> → escolha uma. Sem <code>/logout</code>, sem <code>/login</code>, sem reiniciar: o Claude Code usa o novo login na próxima requisição.</p>
+    </article>
+  </div>
+  <p>Além disso: monitor de CPU, RAM, GPU e disco, alertas de cota opcionais em 80% e 95%, tema claro e escuro, e interface em português e inglês.</p>
+</section>
+
+<section class="wrap section">
+  <h2>Três promessas</h2>
+  <div class="grid">
+    <div class="card"><h3>Gratuito e aberto, para sempre</h3><p>Licença MIT. Sem plano pago, sem cadastro, sem anúncios, sem versão “pro”.</p></div>
+    <div class="card"><h3>Pequeno, sempre</h3><p>Um <code>.exe</code> nativo com menos de 1&nbsp;MB, escrito em Rust (Win32 + Direct2D). Sem runtime, sem instalador, cerca de 15&nbsp;MB de RAM e CPU quase zero.</p></div>
+    <div class="card"><h3>Privado e sob seu controle</h3><p>Zero telemetria, para sempre. Toda troca de conta é um clique manual seu.</p></div>
+  </div>
+  <div class="note">
+    <strong>Dentro das regras da Anthropic e da OpenAI.</strong> O CCT dá visibilidade e conveniência; não serve para contornar limites. Ele nunca troca de conta sozinho, nunca faz rodízio de contas quando o limite acaba, nunca renova tokens por conta própria e só salva planos pagos do Claude (Pro, Max, Team, Enterprise) que sejam seus.
+  </div>
+</section>
+
+<section class="wrap section" id="instalar">
+  <h2>Instale em um minuto</h2>
+  <ol class="steps narrow">
+    <li>Baixe <code>claude-codex-taskbar-{{version}}-x64.zip</code> da <a href="{{release_url}}">versão mais recente</a> e extraia.</li>
+    <li>Coloque o <code>claude-codex-taskbar.exe</code> num lugar fixo, por exemplo <code>%LOCALAPPDATA%\Programs\claude-codex-taskbar\</code>, e execute. Não precisa de administrador.</li>
+    <li>Clique direito na faixa → <strong>Iniciar com o Windows</strong>.</li>
+  </ol>
+  <p class="narrow"><strong>Requisitos:</strong> Windows 11 ou 10 (x64) e o Claude Code e/ou o Codex CLI logados no mesmo usuário do Windows. As versões ainda não são assinadas, então o SmartScreen pode avisar: <strong>Mais informações → Executar assim mesmo</strong>.</p>
+</section>
+
+<section class="wrap section narrow">
+  <h2>Perguntas</h2>
+  <details class="faq">
+    <summary>Como vejo os limites de uso do Claude Code e do Codex no Windows?</summary>
+    <p>Abra o CCT. A faixa mostra o % usado das janelas de 5 horas e semanal, os mesmos números do <code>/usage</code> no Claude Code e do <code>/status</code> no Codex, atualizados a cada 2 minutos. Passe o mouse para ver os horários de reset.</p>
+  </details>
+  <details class="faq">
+    <summary>Como troco entre a conta pessoal e a do trabalho no Claude Code?</summary>
+    <p>Salve cada login uma vez (Conta do Claude → Salvar conta atual) e depois troque em três cliques: clique direito na faixa → Conta do Claude → escolha. As duas precisam ser planos pagos. O Claude Code usa a nova conta na próxima requisição, sem reiniciar.</p>
+  </details>
+  <details class="faq">
+    <summary>Precisa de chave de API ou da minha senha?</summary>
+    <p>Não. O CCT reaproveita o login que os CLIs oficiais <code>claude</code> e <code>codex</code> já salvaram no seu PC.</p>
+  </details>
+  <details class="faq">
+    <summary>O CCT coleta algum dado?</summary>
+    <p>Não. Zero telemetria: sem analytics, sem relatório de falhas, sem checagem de atualização. Ele só conversa com os endpoints de uso dos próprios provedores que você ativar.</p>
+  </details>
+  <details class="faq">
+    <summary>Funciona no Windows 10, macOS ou Linux?</summary>
+    <p>Roda no Windows 11 e no 10 (x64), mas no Windows 10 a faixa ainda fica oculta (issue #10). A versão para macOS vem em breve; Linux ainda não.</p>
+  </details>
+</section>
+
+<section class="band">
+  <div class="wrap split">
+    <div>
+      <h2>Feito em público</h2>
+      <p>Relatos de bugs, testes no seu computador, traduções e código são bem-vindos. Comece pela issue fixada “Want to contribute? Start here”.</p>
+    </div>
+    <div class="cta">
+      <a class="btn" href="{{repo_url}}/issues/72">Quero contribuir</a>
+      <a class="btn" href="{{repo_url}}"><span aria-hidden="true">★</span> Dar estrela {{star_count}}</a>
+    </div>
+  </div>
+</section>

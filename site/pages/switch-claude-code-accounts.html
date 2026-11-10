@@ -1,0 +1,86 @@
+<!--
+{"title": "How to switch between Claude Code accounts on Windows",
+ "h1": "How to switch between Claude Code accounts on Windows",
+ "description": "Switch Claude Code between your personal and work accounts on Windows without /logout and /login: three clicks, no restart, logins encrypted with DPAPI.",
+ "path": "switch-claude-code-accounts/", "lang": "en", "kind": "article", "nav": "accounts",
+ "published": "2026-11-10"}
+-->
+<article class="wrap narrow article">
+  <p class="crumbs"><a href="{{root}}">CCT</a> / Guides</p>
+  <h1>How to switch between Claude Code accounts on Windows</h1>
+  <p class="byline">By Pablo Chiaro Rosa, maintainer of CCT · Updated <time datetime="{{modified}}">{{modified_human}}</time></p>
+
+  <p class="answer"><strong>Short answer:</strong> Claude Code keeps one login per Windows user, so switching normally means <code>/logout</code>, <code>/login</code> and a trip to the browser. With <a href="{{root}}">CCT</a> you save each paid login once, then switch from the taskbar in three clicks: right-click the strip → <strong>Claude account</strong> → pick one. Claude Code uses the new account on its next request, without a restart.</p>
+
+  <h2>Why switching is a pain</h2>
+  <ul class="problem">
+    <li>You forget which account the CLI is on, and spend the wrong quota (or your employer's).</li>
+    <li>Every switch is a full <code>/logout</code> → <code>/login</code> → browser → paste-code round-trip.</li>
+    <li>Limits are per account, so you need to know which one is active before reading any number.</li>
+  </ul>
+
+  <h2>Your options on Windows</h2>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th scope="col">Approach</th><th scope="col">How it works</th><th scope="col">Trade-off</th></tr></thead>
+      <tbody>
+        <tr><th scope="row">Log out and in</th><td><code>/logout</code>, then <code>/login</code> with the other account</td><td>Built in, but slow, and easy to pick the wrong account</td></tr>
+        <tr><th scope="row">One config folder per account</th><td>Set <code>CLAUDE_CONFIG_DIR</code> to a different folder in each terminal</td><td>Both accounts at once, but settings, history and MCP servers are split per folder</td></tr>
+        <tr><th scope="row">Command-line swappers</th><td>Scripts that store logins and swap them on command</td><td>Fast for terminal users; check how they store tokens and whether they switch on their own</td></tr>
+        <tr class="us"><th scope="row">CCT</th><td>Save each login once, switch from the taskbar</td><td>Three clicks, shows which account is active and its usage; Claude Code CLI only, paid plans only</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Switch with CCT, step by step</h2>
+  <ol class="steps">
+    <li><a href="{{root}}#install">Install CCT</a> and log in to Claude Code with your first account.</li>
+    <li>Right-click the strip → <strong>Claude account → Save current account</strong>.</li>
+    <li>In Claude Code, run <code>/login</code> with your second account, then <strong>Save current account</strong> again.</li>
+    <li>From now on, right-click → <strong>Claude account</strong> → pick the account you want. Done.</li>
+  </ol>
+  <p>Give each account a short label in Settings, such as <code>P</code> for personal and <code>W</code> for work. The label sits before the Claude gauges, so after a switch you see at a glance which account you are on. The menu lists every saved account with its email, plan and the usage last seen on it, and marks the active one.</p>
+
+  <h2>How it is kept safe</h2>
+  <ul class="checks">
+    <li><strong>Encrypted at rest.</strong> Saved logins are encrypted with Windows DPAPI for your Windows user, in <code>%APPDATA%\claude-codex-taskbar\accounts\</code>.</li>
+    <li><strong>Claude Code's own locks.</strong> A switch holds the same lock files Claude Code uses, so the two never write the login at the same time.</li>
+    <li><strong>Nothing is lost.</strong> The account you leave is backed up first, so its renewed token is kept; the new login is written through a temp file, and everything is restored if any step fails.</li>
+    <li><strong>Asks before cutting in.</strong> If a Claude Code task is running or waiting for your answer, CCT asks first, because the rest of that task would run on the new account.</li>
+    <li><strong>Warns about expiry.</strong> <code>⚠ login expires in Nd</code> means a saved login is close to expiring; <code>⚠ needs /login</code> means log in with that account and save it again.</li>
+  </ul>
+
+  <h2>The rules CCT follows</h2>
+  <p>CCT is for people who legitimately hold more than one subscription, such as a personal and a work plan. It is a convenience tool, not a way around limits:</p>
+  <ul>
+    <li><strong>Manual only.</strong> It never switches on its own, never rotates accounts when a limit is reached, and never balances load across accounts. This is a design rule enforced in code review, not a setting.</li>
+    <li><strong>Paid plans only.</strong> Only Pro, Max, Team and Enterprise logins can be saved.</li>
+    <li><strong>No token tricks.</strong> CCT never refreshes tokens itself; it reuses the login Claude Code already saved.</li>
+  </ul>
+
+  <h2>Questions</h2>
+  <details class="faq">
+    <summary>Do I need to restart Claude Code after switching?</summary>
+    <p>No. Claude Code picks up the new login on its next request.</p>
+  </details>
+  <details class="faq">
+    <summary>Does it switch the Claude desktop app too?</summary>
+    <p>No. Switching changes the login of the claude CLI (~/.claude/.credentials.json). The Claude desktop app keeps its own login.</p>
+  </details>
+  <details class="faq">
+    <summary>Does it work with CLAUDE_CONFIG_DIR?</summary>
+    <p>Not yet. Account switching is not supported when CLAUDE_CONFIG_DIR is set.</p>
+  </details>
+  <details class="faq">
+    <summary>Can I switch Codex accounts?</summary>
+    <p>Not yet. A Codex account switcher with the same rules is on the roadmap. CCT already shows Codex usage for the current login.</p>
+  </details>
+  <details class="faq">
+    <summary>Is this allowed by Anthropic?</summary>
+    <p>CCT only does what you would do by hand with /logout and /login, for accounts that are yours, and only when you click. Make sure your use follows Anthropic's terms; sharing logins or reselling access does not.</p>
+  </details>
+
+  <div class="note">
+    <p style="margin:0"><strong>Next:</strong> <a href="{{root}}claude-code-usage-windows/">read the usage gauges</a> · <a href="{{root}}alternatives/">compare tools</a> · <a href="{{repo_url}}">★ star CCT on GitHub</a></p>
+  </div>
+</article>

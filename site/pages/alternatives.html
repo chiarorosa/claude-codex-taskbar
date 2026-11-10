@@ -1,0 +1,56 @@
+<!--
+{"title": "Claude Code usage monitors for Windows compared (2026)",
+ "h1": "Claude Code and Codex usage monitors for Windows, compared",
+ "description": "A fair comparison of Windows tools that show Claude Code and Codex usage limits or switch accounts: CCT, Claude Code Usage Monitor, SessionWatcher, claude-swap and more.",
+ "path": "alternatives/", "lang": "en", "kind": "article", "nav": "alternatives",
+ "published": "2026-11-10"}
+-->
+<article class="wrap article">
+  <div class="narrow" style="margin-inline:0">
+    <p class="crumbs"><a href="{{root}}">CCT</a> / Compare</p>
+    <h1>Claude Code and Codex usage monitors for Windows, compared</h1>
+    <p class="byline">By Pablo Chiaro Rosa, maintainer of CCT · Facts checked on 10 Nov 2026 from each project's own page</p>
+    <p>Several community tools show Claude Code limits on Windows. They differ in where they live (taskbar, tray, terminal), whether they cover Codex too, and whether they switch accounts. This page lists what each project says about itself, with a link to the source, so you can pick the one that fits. I maintain CCT, so read its row with that in mind, and <a href="{{repo_url}}/issues/new">open an issue</a> if anything here is out of date.</p>
+  </div>
+
+  <div class="table-scroll wide">
+    <table>
+      <thead>
+        <tr><th scope="col">Tool</th><th scope="col">Lives in</th><th scope="col">Claude Code limits</th><th scope="col">Codex limits</th><th scope="col">Switches Claude accounts</th><th scope="col">Price · license</th><th scope="col">Built with</th><th scope="col">Platforms</th></tr>
+      </thead>
+      <tbody>
+        <tr class="us"><th scope="row"><a href="{{root}}">CCT</a></th><td>Windows 11 taskbar strip</td><td class="y">Yes</td><td class="y">Yes</td><td class="y">Yes, manual only</td><td>Free · MIT</td><td>Rust, &lt; 1 MB .exe</td><td>Windows 11 / 10</td></tr>
+        <tr><th scope="row"><a href="https://github.com/CodeZeno/Claude-Code-Usage-Monitor">Claude Code Usage Monitor</a></th><td>Taskbar widget + tray</td><td class="y">Yes</td><td class="y">Yes</td><td class="n">Not stated (tracks several accounts)</td><td>Free · MIT</td><td>Rust</td><td>Windows 11 / 10</td></tr>
+        <tr><th scope="row"><a href="https://sessionwatcher.com/windows-taskbar">SessionWatcher</a></th><td>Taskbar readout, floating window or tray</td><td class="y">Yes</td><td class="y">Yes</td><td class="n">Not stated (multi-account tracking in Pro)</td><td>Paid, from $8.99 one-time · proprietary</td><td>.NET runtime bundled</td><td>Windows 11 / 10, macOS</td></tr>
+        <tr><th scope="row"><a href="https://github.com/sr-kai/claudeusagewin">Claude Usage Monitor for Windows</a></th><td>System tray + popup</td><td class="y">Yes</td><td class="n">Not mentioned</td><td class="n">Not stated</td><td>Free · MIT</td><td>C# / .NET 8 (runtime needed)</td><td>Windows 11 / 10</td></tr>
+        <tr><th scope="row"><a href="https://github.com/jens-duttke/usage-monitor-for-claude">Usage Monitor for Claude</a></th><td>System tray + popup</td><td class="y">Yes</td><td class="n">No</td><td class="n">No (one instance per account)</td><td>Free · MIT</td><td>Python (PyInstaller)</td><td>Windows 11 / 10, Linux from source</td></tr>
+        <tr><th scope="row"><a href="https://github.com/realiti4/claude-swap">claude-swap</a></th><td>Terminal (CLI and TUI)</td><td class="y">Yes</td><td class="n">Not mentioned</td><td class="y">Yes, including automatic switching on thresholds</td><td>Free · MIT</td><td>Python 3.12+</td><td>Windows, macOS, Linux</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="muted narrow" style="margin-inline:0">“Not stated” means the project's page does not say, not that the feature is missing. Prices and features change; follow the links for the current details.</p>
+
+  <div class="narrow" style="margin-inline:0">
+    <h2>Which one should you pick?</h2>
+    <ul>
+      <li><strong>You use both Claude Code and Codex, or have a personal and a work account:</strong> CCT shows both services side by side with your account label, and switches Claude Code accounts by hand in three clicks.</li>
+      <li><strong>You want the smallest possible footprint:</strong> CCT and Claude Code Usage Monitor are both native Rust apps; CCT is a single .exe under 1 MB with no installer.</li>
+      <li><strong>You live in the terminal or are on macOS or Linux:</strong> claude-swap has a TUI and runs everywhere Python does.</li>
+      <li><strong>You want automatic account rotation:</strong> claude-swap offers it. CCT deliberately never switches on its own, to stay a convenience tool rather than a way around limits.</li>
+      <li><strong>You run Claude Code inside WSL:</strong> Claude Code Usage Monitor, Claude Usage Monitor for Windows and Usage Monitor for Claude mention WSL support; CCT reads the Windows-side login.</li>
+      <li><strong>You want a supported commercial product with Cursor too:</strong> SessionWatcher sells bundles that cover Claude Code, Codex and Cursor.</li>
+    </ul>
+
+    <h2>What makes CCT different</h2>
+    <ul class="checks">
+      <li>Usage <strong>and</strong> the account behind it, for Claude Code and Codex, in one strip.</li>
+      <li>Manual-only Claude account switching with Claude Code's own locks, DPAPI encryption and automatic backups.</li>
+      <li>CPU, RAM, GPU and per-disk activity in the same strip.</li>
+      <li>Zero telemetry, no installer, no runtime, free forever.</li>
+    </ul>
+    <div class="cta">
+      <a class="btn primary" href="{{release_url}}">Download CCT {{version}}</a>
+      <a class="btn" href="{{repo_url}}"><span aria-hidden="true">★</span> Star on GitHub {{star_count}}</a>
+    </div>
+  </div>
+</article>

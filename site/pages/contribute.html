@@ -1,0 +1,54 @@
+<!--
+{"title": "Contribute to CCT: open-source Rust app for Windows",
+ "h1": "Contribute to CCT",
+ "description": "Help build CCT, an open-source Rust taskbar app for Windows: test it on your setup, translate it, fix an open issue or improve this website. Here is how to start.",
+ "path": "contribute/", "lang": "en", "kind": "page", "nav": "contribute", "live": true}
+-->
+<article class="wrap article">
+  <div class="narrow" style="margin-inline:0">
+    <p class="crumbs"><a href="{{root}}">CCT</a> / Contribute</p>
+    <h1>Contribute to CCT</h1>
+    <p class="lead">CCT is a small, native Windows app written in Rust, made in the open. You do not need to be a Rust expert to help: testing on your own PC, translating and writing docs matter as much as code.</p>
+  </div>
+
+  <h2>Ways to help</h2>
+  <div class="grid">
+    <div class="card"><h3>Test on your setup</h3><p>Different DPI, several monitors, auto-hide taskbar, Windows 10. Tell us what you see in the <a href="{{repo_url}}/issues/26">call for testers</a>.</p></div>
+    <div class="card"><h3>Translate</h3><p>CCT speaks English and Brazilian Portuguese. Every string lives in one file, <code>src/i18n.rs</code>. Spanish is <a href="{{repo_url}}/issues/35">already requested</a>.</p></div>
+    <div class="card"><h3>Write code</h3><p>Pick an issue below. Each one says what is expected; ask on the issue before starting so nobody duplicates work.</p></div>
+    <div class="card"><h3>Spread the word</h3><p>A <a href="{{repo_url}}">star on GitHub</a> helps other developers find CCT. So does a post about how you use it.</p></div>
+  </div>
+
+  <h2>Open issues that need help</h2>
+  <p>Updated automatically from GitHub. Start with the pinned <a href="{{repo_url}}/issues/72">“Want to contribute? Start here”</a>.</p>
+  {{issues}}
+
+  <div class="split" style="margin-top:2rem">
+    <div>
+      <h2>Build it in five minutes</h2>
+      <p>You need Rust stable, the <code>x86_64-pc-windows-msvc</code> target and Visual Studio Build Tools.</p>
+<pre><code>git clone {{repo_url}}
+cd claude-codex-taskbar
+cargo build --release
+cargo fmt --check
+cargo clippy --all-targets -- -D warnings
+cargo test</code></pre>
+      <p>Read <a href="{{repo_url}}/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a> and the <a href="{{repo_url}}/blob/main/CODE_OF_CONDUCT.md">Code of Conduct</a>. Coding agents should read <a href="{{repo_url}}/blob/main/AGENTS.md">AGENTS.md</a>.</p>
+    </div>
+    <div>
+      <h2>The house rules</h2>
+      <ul class="checks">
+        <li>Pure logic in testable functions; write the failing test first.</li>
+        <li>Credentials are read-only, except the Claude switcher on an explicit click.</li>
+        <li>Account switches are manual only. No automatic switching, ever, not even in tests.</li>
+        <li>No telemetry. Network access only to the providers' usage endpoints.</li>
+        <li>Errors show <code>—</code>, never a fake <code>0%</code>.</li>
+        <li>Keep the binary small; discuss new crates in an issue first.</li>
+        <li>Conventional Commits, small focused pull requests.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>Improve this website</h2>
+  <p class="narrow" style="margin-inline:0">The site lives in the <a href="{{repo_url}}/tree/main/site"><code>site/</code></a> folder: plain HTML pages, one CSS file and a small Python build with no dependencies (<code>python site/build.py</code>). It is rebuilt on every release, so new versions and changelog entries show up here on their own. Better guides, translations of the guides and fixes to the comparison table are welcome.</p>
+</article>
