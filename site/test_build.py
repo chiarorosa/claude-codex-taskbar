@@ -201,6 +201,14 @@ class FullBuild(unittest.TestCase):
         ld = re.search(r'<script type="application/ld\+json">(.*?)</script>', html_text, re.S).group(1)
         json.loads(ld)
 
+    def test_site_pages_are_prefetched_on_hover(self):
+        html_text = (self.out / "index.html").read_text(encoding="utf-8")
+        rules = re.search(r'<script type="speculationrules">(.*?)</script>', html_text, re.S)
+        self.assertIsNotNone(rules)
+        rule = json.loads(rules.group(1))["prefetch"][0]
+        self.assertEqual(rule["where"]["href_matches"], build.ROOT + "*")
+        self.assertEqual(rule["eagerness"], "moderate")
+
     def test_support_files(self):
         for name in ("sitemap.xml", "llms.txt", ".nojekyll", "favicon.svg", "img/screenshot.png"):
             self.assertTrue((self.out / name).exists(), name)
