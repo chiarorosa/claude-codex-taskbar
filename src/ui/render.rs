@@ -11,7 +11,7 @@ use windows::Win32::Graphics::Direct2D::{
     D2D1_DRAW_TEXT_OPTIONS_NONE, D2D1_FACTORY_TYPE_SINGLE_THREADED, D2D1_FEATURE_LEVEL_DEFAULT,
     D2D1_RENDER_TARGET_PROPERTIES, D2D1_RENDER_TARGET_TYPE_SOFTWARE, D2D1_RENDER_TARGET_USAGE_NONE,
     D2D1_ROUNDED_RECT, D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE, D2D1CreateFactory, ID2D1DCRenderTarget,
-    ID2D1Factory,
+    ID2D1Factory, ID2D1SolidColorBrush,
 };
 use windows::Win32::Graphics::DirectWrite::{
     DWRITE_FACTORY_TYPE_SHARED, DWRITE_FONT_STRETCH_NORMAL, DWRITE_FONT_STYLE_NORMAL,
@@ -22,8 +22,8 @@ use windows::Win32::Graphics::DirectWrite::{
 use windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT_B8G8R8A8_UNORM;
 use windows::Win32::Graphics::Gdi::{
     AC_SRC_ALPHA, AC_SRC_OVER, BI_RGB, BITMAPINFO, BITMAPINFOHEADER, BLENDFUNCTION,
-    CreateCompatibleDC, CreateDIBSection, DIB_RGB_COLORS, DeleteDC, DeleteObject, GetDC, HGDIOBJ,
-    ReleaseDC, SelectObject,
+    CreateCompatibleDC, CreateDIBSection, DIB_RGB_COLORS, DeleteDC, DeleteObject, HBITMAP, HDC,
+    HGDIOBJ, SelectObject,
 };
 use windows::Win32::UI::WindowsAndMessaging::{ULW_ALPHA, UpdateLayeredWindow};
 use windows::core::{Result, w};
@@ -89,11 +89,113 @@ fn to_dip(px: i32, dpi: u32) -> f32 {
     px as f32 * 96.0 / dpi as f32
 }
 
+/// The GDI bitmap and Direct2D target for one strip size, kept between frames (#86).
+struct Surface {
+    w: i32,
+    h: i32,
+    dpi: u32,
+    mem: HDC,
+    dib: HBITMAP,
+    /// The bitmap `mem` came with, selected back before `mem` is deleted.
+    old: HGDIOBJ,
+    rt: ID2D1DCRenderTarget,
+    brush: ID2D1SolidColorBrush,
+}
+
+impl Surface {
+    fn new(d2d: &ID2D1Factory, w: i32, h: i32, dpi: u32) -> Result<Surface> {
+        let bmi = BITMAPINFO {
+            bmiHeader: BITMAPINFOHEADER {
+                biSize: size_of::<BITMAPINFOHEADER>() as u32,
+                biWidth: w,
+                biHeight: -h,
+                biPlanes: 1,
+                biBitCount: 32,
+                biCompression: BI_RGB.0,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let props = D2D1_RENDER_TARGET_PROPERTIES {
+            // Software rendering avoids loading the GPU driver (~60 MB) for a tiny strip.
+            r#type: D2D1_RENDER_TARGET_TYPE_SOFTWARE,
+            pixelFormat: D2D1_PIXEL_FORMAT {
+                format: DXGI_FORMAT_B8G8R8A8_UNORM,
+                alphaMode: D2D1_ALPHA_MODE_PREMULTIPLIED,
+            },
+            dpiX: dpi as f32,
+            dpiY: dpi as f32,
+            usage: D2D1_RENDER_TARGET_USAGE_NONE,
+            minLevel: D2D1_FEATURE_LEVEL_DEFAULT,
+        };
+        // SAFETY: a null DC means "compatible with the screen"; every object created here is
+        // released on the error paths below or by `Drop`.
+        unsafe {
+            let mem = CreateCompatibleDC(None);
+            let mut bits = std::ptr::null_mut();
+            let dib = match CreateDIBSection(Some(mem), &bmi, DIB_RGB_COLORS, &mut bits, None, 0) {
+                Ok(dib) => dib,
+                Err(err) => {
+                    let _ = DeleteDC(mem);
+                    return Err(err);
+                }
+            };
+            let old = SelectObject(mem, HGDIOBJ(dib.0));
+            let target = d2d.CreateDCRenderTarget(&props).and_then(|rt| {
+                let area = RECT {
+                    left: 0,
+                    top: 0,
+                    right: w,
+                    bottom: h,
+                };
+                rt.BindDC(mem, &area)?;
+                rt.SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
+                let brush = rt.CreateSolidColorBrush(&color(0, 1.0), None)?;
+                Ok((rt, brush))
+            });
+            match target {
+                Ok((rt, brush)) => Ok(Surface {
+                    w,
+                    h,
+                    dpi,
+                    mem,
+                    dib,
+                    old,
+                    rt,
+                    brush,
+                }),
+                Err(err) => {
+                    SelectObject(mem, old);
+                    let _ = DeleteObject(HGDIOBJ(dib.0));
+                    let _ = DeleteDC(mem);
+                    Err(err)
+                }
+            }
+        }
+    }
+
+    fn fits(&self, w: i32, h: i32, dpi: u32) -> bool {
+        (self.w, self.h, self.dpi) == (w, h, dpi)
+    }
+}
+
+impl Drop for Surface {
+    fn drop(&mut self) {
+        // SAFETY: the objects were created by `new` and are released exactly once.
+        unsafe {
+            SelectObject(self.mem, self.old);
+            let _ = DeleteObject(HGDIOBJ(self.dib.0));
+            let _ = DeleteDC(self.mem);
+        }
+    }
+}
+
 pub struct Renderer {
     d2d: ID2D1Factory,
     dwrite: IDWriteFactory,
     label_fmt: IDWriteTextFormat,
     value_fmt: IDWriteTextFormat,
+    surface: Option<Surface>,
 }
 
 fn text_format(
@@ -134,6 +236,7 @@ impl Renderer {
             dwrite,
             label_fmt,
             value_fmt,
+            surface: None,
         })
     }
 
@@ -182,7 +285,7 @@ impl Renderer {
     /// Draws the strip and pushes it to `hwnd` at screen position `pos` with size `size` (px).
     #[allow(clippy::too_many_arguments)]
     pub fn paint(
-        &self,
+        &mut self,
         hwnd: HWND,
         pos: (i32, i32),
         size: (i32, i32),
@@ -193,98 +296,68 @@ impl Renderer {
         light: bool,
     ) -> Result<()> {
         let (w, h) = (size.0.max(1), size.1.max(1));
-        // SAFETY: GDI objects are created, used and released within this call.
-        unsafe {
-            let screen = GetDC(None);
-            let mem = CreateCompatibleDC(Some(screen));
-            let bmi = BITMAPINFO {
-                bmiHeader: BITMAPINFOHEADER {
-                    biSize: size_of::<BITMAPINFOHEADER>() as u32,
-                    biWidth: w,
-                    biHeight: -h,
-                    biPlanes: 1,
-                    biBitCount: 32,
-                    biCompression: BI_RGB.0,
-                    ..Default::default()
-                },
-                ..Default::default()
-            };
-            let mut bits = std::ptr::null_mut();
-            let result = CreateDIBSection(Some(mem), &bmi, DIB_RGB_COLORS, &mut bits, None, 0)
-                .and_then(|dib| {
-                    let old = SelectObject(mem, HGDIOBJ(dib.0));
-                    let drawn = self
-                        .draw(mem, (w, h), dpi, items, metrics, layout, light)
-                        .and_then(|_| {
-                            let blend = BLENDFUNCTION {
-                                BlendOp: AC_SRC_OVER as u8,
-                                BlendFlags: 0,
-                                SourceConstantAlpha: 255,
-                                AlphaFormat: AC_SRC_ALPHA as u8,
-                            };
-                            UpdateLayeredWindow(
-                                hwnd,
-                                Some(screen),
-                                Some(&POINT { x: pos.0, y: pos.1 }),
-                                Some(&SIZE { cx: w, cy: h }),
-                                Some(mem),
-                                Some(&POINT::default()),
-                                COLORREF(0),
-                                Some(&blend),
-                                ULW_ALPHA,
-                            )
-                        });
-                    SelectObject(mem, old);
-                    let _ = DeleteObject(HGDIOBJ(dib.0));
-                    drawn
-                });
-            let _ = DeleteDC(mem);
-            ReleaseDC(None, screen);
-            result
+        if !self.surface.as_ref().is_some_and(|s| s.fits(w, h, dpi)) {
+            self.surface = None;
+            self.surface = Some(Surface::new(&self.d2d, w, h, dpi)?);
         }
+        let result = match &self.surface {
+            Some(surface) => {
+                // SAFETY: the surface's DC holds a 32-bpp DIB of (w, h); hwnd is layered.
+                unsafe { self.draw(surface, items, metrics, layout, light) }.and_then(|_| {
+                    let blend = BLENDFUNCTION {
+                        BlendOp: AC_SRC_OVER as u8,
+                        BlendFlags: 0,
+                        SourceConstantAlpha: 255,
+                        AlphaFormat: AC_SRC_ALPHA as u8,
+                    };
+                    // SAFETY: as above; a null destination DC means the screen's default palette.
+                    unsafe {
+                        UpdateLayeredWindow(
+                            hwnd,
+                            None,
+                            Some(&POINT { x: pos.0, y: pos.1 }),
+                            Some(&SIZE { cx: w, cy: h }),
+                            Some(surface.mem),
+                            Some(&POINT::default()),
+                            COLORREF(0),
+                            Some(&blend),
+                            ULW_ALPHA,
+                        )
+                    }
+                })
+            }
+            None => Ok(()),
+        };
+        if result.is_err() {
+            // Covers D2DERR_RECREATE_TARGET: the next frame starts from new objects.
+            self.surface = None;
+        }
+        result
     }
 
-    #[allow(clippy::too_many_arguments)]
     unsafe fn draw(
         &self,
-        dc: windows::Win32::Graphics::Gdi::HDC,
-        (w, h): (i32, i32),
-        dpi: u32,
+        surface: &Surface,
         items: &[ItemView],
         metrics: &[ItemMetrics],
         layout: &Layout,
         light: bool,
     ) -> Result<()> {
-        let props = D2D1_RENDER_TARGET_PROPERTIES {
-            // Software rendering avoids loading the GPU driver (~60 MB) for a tiny strip.
-            r#type: D2D1_RENDER_TARGET_TYPE_SOFTWARE,
-            pixelFormat: D2D1_PIXEL_FORMAT {
-                format: DXGI_FORMAT_B8G8R8A8_UNORM,
-                alphaMode: D2D1_ALPHA_MODE_PREMULTIPLIED,
-            },
-            dpiX: dpi as f32,
-            dpiY: dpi as f32,
-            usage: D2D1_RENDER_TARGET_USAGE_NONE,
-            minLevel: D2D1_FEATURE_LEVEL_DEFAULT,
-        };
+        let Surface {
+            w,
+            h,
+            dpi,
+            rt,
+            brush,
+            ..
+        } = surface;
+        let (w, h, dpi) = (*w, *h, *dpi);
         let palette = if light { &LIGHT } else { &DARK };
-        // SAFETY: dc has a 32-bpp DIB selected covering (w, h).
+        // SAFETY: the render target is bound to the surface's DC for its whole life.
         unsafe {
-            let rt: ID2D1DCRenderTarget = self.d2d.CreateDCRenderTarget(&props)?;
-            rt.BindDC(
-                dc,
-                &RECT {
-                    left: 0,
-                    top: 0,
-                    right: w,
-                    bottom: h,
-                },
-            )?;
-            rt.SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
             rt.BeginDraw();
             // Nearly transparent fill keeps the whole strip hit-testable for hover and clicks.
             rt.Clear(Some(&color(0, 1.0 / 255.0)));
-            let brush = rt.CreateSolidColorBrush(&color(0, 1.0), None)?;
             let set = |rgb: u32, a: f32| brush.SetColor(&color(rgb, a));
             let h_dip = to_dip(h, dpi);
             let block_h = match layout.mode {
@@ -317,13 +390,13 @@ impl Renderer {
                         bottom: by + BADGE_H,
                     };
                     set(bar_color(item.kind, Some(0.0)), 1.0);
-                    rt.FillRectangle(&r, &brush);
+                    rt.FillRectangle(&r, brush);
                     set(0xffffff, 1.0);
                     rt.DrawText(
                         &wide(badge),
                         &self.value_fmt,
                         &r,
-                        &brush,
+                        brush,
                         D2D1_DRAW_TEXT_OPTIONS_NONE,
                         DWRITE_MEASURING_MODE_NATURAL,
                     );
@@ -343,7 +416,7 @@ impl Renderer {
                         &wide(&item.label),
                         &self.label_fmt,
                         &r,
-                        &brush,
+                        brush,
                         D2D1_DRAW_TEXT_OPTIONS_NONE,
                         DWRITE_MEASURING_MODE_NATURAL,
                     );
@@ -360,7 +433,7 @@ impl Renderer {
                     &wide(&item.text()),
                     &self.value_fmt,
                     &r,
-                    &brush,
+                    brush,
                     D2D1_DRAW_TEXT_OPTIONS_NONE,
                     DWRITE_MEASURING_MODE_NATURAL,
                 );
@@ -377,13 +450,13 @@ impl Renderer {
                     radiusY: BAR_RADIUS,
                 };
                 set(palette.track, 1.0);
-                rt.FillRoundedRectangle(&bar(bx + BAR_W), &brush);
+                rt.FillRoundedRectangle(&bar(bx + BAR_W), brush);
                 if let Some(v) = item.value.filter(|v| *v > 0.0) {
                     set(
                         bar_color(item.kind, Some(v)),
                         if item.dim { 0.5 } else { 1.0 },
                     );
-                    rt.FillRoundedRectangle(&bar(bx + BAR_W * v.clamp(0.0, 100.0) / 100.0), &brush);
+                    rt.FillRoundedRectangle(&bar(bx + BAR_W * v.clamp(0.0, 100.0) / 100.0), brush);
                 }
                 x += col_w;
                 if layout.separator_after == Some(i) {
@@ -397,7 +470,7 @@ impl Renderer {
                             right: x + SEP_W,
                             bottom: sy + SEP_H,
                         },
-                        &brush,
+                        brush,
                     );
                     x += SEP_W;
                 }
@@ -415,7 +488,7 @@ impl Renderer {
                     &wide(ELLIPSIS),
                     &self.value_fmt,
                     &r,
-                    &brush,
+                    brush,
                     D2D1_DRAW_TEXT_OPTIONS_NONE,
                     DWRITE_MEASURING_MODE_NATURAL,
                 );

@@ -38,7 +38,7 @@ fn idle_cost() {
     sampler.sample();
     std::thread::sleep(std::time::Duration::from_secs(1));
     let hw = sampler.sample();
-    let renderer = Renderer::new().expect("renderer");
+    let mut renderer = Renderer::new().expect("renderer");
     let loading = ProviderStatus::Loading;
     let cfg = Config::default();
     let items = build_items(&cfg, &hw, &loading, &loading, "P", Lang::En);
