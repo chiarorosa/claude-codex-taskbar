@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- **About 40% less CPU while idle.** The strip no longer repaints a frame that is already on
+  screen, keeps its bitmap and Direct2D target between frames, and re-reads the Start button's
+  position instead of searching the taskbar for it every time. Nothing looks or updates
+  differently. Measured over 10 minutes at the default settings: 3.58 s of CPU time before,
+  2.09 s after (#86).
+
 ## [0.4.1] - 2026-11-10
 
 ### Added
