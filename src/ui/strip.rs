@@ -79,7 +79,36 @@ pub fn hide(hwnd: HWND, app: &mut App) {
     }
 }
 
+thread_local! {
+    static MENU_OPEN: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Marks the right-click menu as open. Renders keep running during its modal loop, and raising
+/// the strip then would put it on top of its own menu.
+struct MenuOpen;
+
+impl MenuOpen {
+    fn begin() -> Self {
+        MENU_OPEN.with(|m| m.set(true));
+        Self
+    }
+}
+
+impl Drop for MenuOpen {
+    fn drop(&mut self) {
+        MENU_OPEN.with(|m| m.set(false));
+    }
+}
+
+/// Whether the strip may move itself to the top of the topmost band right now.
+fn may_raise() -> bool {
+    !MENU_OPEN.with(|m| m.get())
+}
+
 fn reassert_topmost(hwnd: HWND) {
+    if !may_raise() {
+        return;
+    }
     // SAFETY: hwnd is our live window.
     unsafe {
         let _ = SetWindowPos(
@@ -154,6 +183,7 @@ fn show_menu(hwnd: HWND) {
         let _ = GetCursorPos(&mut pt);
         // Required so the menu closes when clicking elsewhere.
         let _ = SetForegroundWindow(hwnd);
+        let menu_open = MenuOpen::begin();
         let cmd = TrackPopupMenu(
             menu,
             TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_BOTTOMALIGN,
@@ -163,6 +193,7 @@ fn show_menu(hwnd: HWND) {
             hwnd,
             None,
         );
+        drop(menu_open);
         let _ = DestroyMenu(menu);
         cmd.0 as usize
     };
@@ -536,5 +567,16 @@ mod tests {
         ];
         let unique: std::collections::BTreeSet<_> = ids.iter().collect();
         assert_eq!(unique.len(), ids.len(), "{ids:?}");
+    }
+
+    #[test]
+    fn strip_stays_below_its_open_menu() {
+        // A render during the menu's modal loop used to raise the strip above the menu.
+        assert!(may_raise());
+        {
+            let _menu = MenuOpen::begin();
+            assert!(!may_raise());
+        }
+        assert!(may_raise());
     }
 }
