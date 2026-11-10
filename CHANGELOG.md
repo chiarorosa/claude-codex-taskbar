@@ -6,12 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-11-10
+
 ### Changed
 - **About 40% less CPU while idle.** The strip no longer repaints a frame that is already on
   screen, keeps its bitmap and Direct2D target between frames, and re-reads the Start button's
   position instead of searching the taskbar for it every time. Nothing looks or updates
   differently. Measured over 10 minutes at the default settings: 3.58 s of CPU time before,
-  2.09 s after (#86).
+  2.09 s after (#86, #90, #91, #94, #95).
 
 ## [0.4.1] - 2026-11-10
 
@@ -169,7 +171,8 @@ All notable changes to this project are documented here. The format follows
   5-hour/weekly limits, tooltip with reset times, settings window, start with Windows,
   English and Brazilian Portuguese UI.
 
-[Unreleased]: https://github.com/chiarorosa/claude-codex-taskbar/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/chiarorosa/claude-codex-taskbar/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/chiarorosa/claude-codex-taskbar/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/chiarorosa/claude-codex-taskbar/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/chiarorosa/claude-codex-taskbar/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/chiarorosa/claude-codex-taskbar/compare/v0.2.1...v0.3.0
