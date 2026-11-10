@@ -77,6 +77,7 @@ pub fn hide(hwnd: HWND, app: &mut App) {
         }
         app.shown = false;
     }
+    app.invalidate_frame();
 }
 
 thread_local! {
@@ -318,7 +319,10 @@ extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM)
             LRESULT(0)
         }
         WM_DISPLAYCHANGE | WM_DPICHANGED => {
-            with_app(|app| app.invalidate_icons());
+            with_app(|app| {
+                app.invalidate_icons();
+                app.invalidate_frame();
+            });
             render(hwnd);
             LRESULT(0)
         }
@@ -376,7 +380,10 @@ extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM)
         }
         _ if taskbar_created != 0 && msg == taskbar_created => {
             notifications::cancel(hwnd);
-            with_app(|app| app.invalidate_icons());
+            with_app(|app| {
+                app.invalidate_icons();
+                app.invalidate_frame();
+            });
             render(hwnd);
             LRESULT(0)
         }

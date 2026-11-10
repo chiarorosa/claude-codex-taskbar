@@ -1,5 +1,6 @@
 //! Application state and wiring: config, sampler, limits worker and the strip window.
 
+use super::frame::{FrameCache, FrameKey};
 use super::layout::{Layout, layout};
 use super::notifications::{Notice, Notifications};
 use super::render::{GAP, Renderer, SEP_W, to_px};
@@ -57,6 +58,7 @@ pub struct App {
     icons: IconCache,
     items: Vec<ItemView>,
     layout: Option<Layout>,
+    frame: FrameCache,
     light: bool,
     pub shown: bool,
     inbox: Option<Receiver<LimitResult>>,
@@ -142,6 +144,7 @@ impl App {
             icons: IconCache::default(),
             items: Vec::new(),
             layout: None,
+            frame: FrameCache::default(),
             light: light_theme(),
             shown: false,
             inbox: None,
@@ -342,8 +345,22 @@ impl App {
             &self.claude_label,
             self.lang,
         );
-        let metrics = self.renderer.measure(&self.items, dpi);
         let margin = to_px(MARGIN_DIP, dpi);
+        let key = FrameKey {
+            items: self.items.clone(),
+            taskbar: info.rect,
+            dpi,
+            available: available_width(&info, margin),
+            light: self.light,
+        };
+        let covered = !info.visible || foreground_is_fullscreen(info.monitor);
+        // The same frame is already on screen: only keep the strip above the taskbar (#86).
+        if !covered && self.frame.is_current(&key) {
+            strip::show(hwnd, self);
+            self.taskbar = Some(info);
+            return;
+        }
+        let metrics = self.renderer.measure(&self.items, dpi);
         let kinds: Vec<_> = self
             .items
             .iter()
@@ -352,13 +369,12 @@ impl App {
             .collect();
         let l = layout(
             &kinds,
-            available_width(&info, margin),
+            key.available,
             to_px(GAP, dpi),
             to_px(SEP_W, dpi),
             self.renderer.ellipsis_px(dpi),
         );
-        let hide = !info.visible || l.width == 0 || foreground_is_fullscreen(info.monitor);
-        if hide {
+        if covered || l.width == 0 {
             strip::hide(hwnd, self);
         } else {
             let pos = (info.rect.left + margin, info.rect.top);
@@ -366,14 +382,21 @@ impl App {
             let painted =
                 self.renderer
                     .paint(hwnd, pos, size, dpi, &self.items, &metrics, &l, self.light);
-            let action = hides_strip(painted.is_err());
-            match action {
-                StripAction::Show => strip::show(hwnd, self),
+            match hides_strip(painted.is_err()) {
+                StripAction::Show => {
+                    self.frame.painted(key);
+                    strip::show(hwnd, self);
+                }
                 StripAction::Hide => strip::hide(hwnd, self),
             }
         }
         self.layout = Some(l);
         self.taskbar = Some(info);
+    }
+
+    /// Forces the next render to paint, e.g. after the taskbar or the display changed.
+    pub fn invalidate_frame(&mut self) {
+        self.frame.invalidate();
     }
 
     /// The monitor the strip's taskbar is on, from the last taskbar query.

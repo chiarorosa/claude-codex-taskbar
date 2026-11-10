@@ -5,6 +5,7 @@ pub mod app;
 #[cfg(test)]
 mod bench;
 pub mod clipboard;
+pub mod frame;
 pub mod layout;
 pub mod menu;
 pub mod notifications;
