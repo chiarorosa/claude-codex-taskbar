@@ -2,6 +2,8 @@
 
 pub mod accounts;
 pub mod app;
+#[cfg(test)]
+mod bench;
 pub mod clipboard;
 pub mod layout;
 pub mod menu;
