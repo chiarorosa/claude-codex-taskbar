@@ -201,6 +201,21 @@ class FullBuild(unittest.TestCase):
         ld = re.search(r'<script type="application/ld\+json">(.*?)</script>', html_text, re.S).group(1)
         json.loads(ld)
 
+    def test_translations_point_at_each_other(self):
+        by_path = {p["path"]: p for p in self.pages}
+        for p in self.pages:
+            for lang, path in p.get("alternates", {}).items():
+                self.assertIn(path, by_path, f"{p['path']}: alternate {path} is not a page")
+                self.assertEqual(by_path[path].get("lang", "en"), lang, path)
+                self.assertEqual(by_path[path].get("alternates"), p["alternates"],
+                                 f"{p['path']} and {path} must list the same alternates")
+
+    def test_language_switch_opens_the_same_page(self):
+        guide = (self.out / "pt-br" / "trocar-contas-claude-code" / "index.html").read_text(encoding="utf-8")
+        self.assertIn(f'<a class="lang" href="{build.ROOT}switch-claude-code-accounts/"', guide)
+        changelog = (self.out / "changelog" / "index.html").read_text(encoding="utf-8")
+        self.assertIn(f'<a class="lang" href="{build.ROOT}pt-br/"', changelog)
+
     def test_site_pages_are_prefetched_on_hover(self):
         html_text = (self.out / "index.html").read_text(encoding="utf-8")
         rules = re.search(r'<script type="speculationrules">(.*?)</script>', html_text, re.S)

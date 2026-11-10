@@ -1,0 +1,81 @@
+<!--
+{"title": "Como ver os limites de uso do Claude Code no Windows",
+ "h1": "Como ver os limites de uso do Claude Code no Windows",
+ "description": "Três jeitos de ver os limites de 5 horas e semanal do Claude Code no Windows 11 e 10: o comando /usage, a página da sua conta ou um medidor na barra de tarefas.",
+ "path": "pt-br/uso-claude-code-windows/", "lang": "pt-BR", "kind": "article", "nav": "claude",
+ "published": "2026-11-10",
+ "alternates": {"en": "claude-code-usage-windows/", "pt-BR": "pt-br/uso-claude-code-windows/"}}
+-->
+<article class="wrap narrow article">
+  <p class="crumbs"><a href="{{root}}pt-br/">CCT</a> / Guias</p>
+  <h1>Como ver os limites de uso do Claude Code no Windows</h1>
+  <p class="byline">Por Pablo Chiaro Rosa, mantenedor do CCT · Atualizado em <time datetime="{{modified}}">{{modified_human}}</time></p>
+
+  <p class="answer"><strong>Resposta curta:</strong> digite <code>/usage</code> dentro do Claude Code para ver na hora os limites de 5 horas e semanal. Para ter esses números sempre à vista, sem precisar perguntar, use o <a href="{{root}}pt-br/">CCT</a>, um widget gratuito para a barra de tarefas que mostra o % usado das duas janelas da conta em que você está logado, atualizado a cada 2 minutos.</p>
+
+  <h2>Quais são os limites do Claude Code</h2>
+  <p>As assinaturas do Claude (Pro, Max, Team, Enterprise) medem o uso do Claude Code em duas janelas:</p>
+  <ul>
+    <li><strong>Janela de 5 horas</strong>: um limite de sessão móvel, que zera algumas horas depois que você começa a usar.</li>
+    <li><strong>Janela semanal</strong>: um limite de 7 dias, com números semanais separados para alguns modelos, como Opus e Sonnet.</li>
+  </ul>
+  <p>Os limites são da sua <strong>conta</strong>, não de um aplicativo. O uso no Claude Code CLI, no app desktop do Claude e no claude.ai conta para os mesmos números. Se você tem uma conta pessoal e outra do trabalho, cada uma tem seus próprios limites: o número só faz sentido ao lado da conta a que pertence.</p>
+
+  <h2>Três jeitos de ver no Windows</h2>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th scope="col">Jeito</th><th scope="col">Onde</th><th scope="col">Sempre visível</th><th scope="col">Mostra a conta</th><th scope="col">Alertas</th></tr></thead>
+      <tbody>
+        <tr><th scope="row"><code>/usage</code> no Claude Code</th><td>Dentro de uma sessão no terminal</td><td class="n">Não, só quando você pede</td><td class="n">Não</td><td class="n">Não</td></tr>
+        <tr><th scope="row">Página de uso nas configurações do Claude</th><td>Navegador, claude.ai</td><td class="n">Não</td><td>Sim, a que está logada</td><td class="n">Não</td></tr>
+        <tr class="us"><th scope="row">CCT na barra de tarefas</th><td>Barra de tarefas do Windows 11</td><td class="y">Sim, atualizado a cada 2 min</td><td class="y">Sim, com o seu rótulo</td><td class="y">Opcionais, em 80% / 95%</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Configure o medidor na barra de tarefas</h2>
+  <ol class="steps">
+    <li>Confira se o Claude Code está logado no seu usuário do Windows: rode <code>claude</code> uma vez e conclua o <code>/login</code>.</li>
+    <li>Baixe o zip da <a href="{{release_url}}">versão mais recente do CCT</a>, extraia o <code>claude-codex-taskbar.exe</code> para uma pasta fixa e execute. Sem instalador e sem precisar de administrador.</li>
+    <li>Desligue o botão de Widgets do Windows (<em>Configurações → Personalização → Barra de tarefas → Widgets</em>) e mantenha os ícones centralizados: a faixa aparece no canto esquerdo.</li>
+    <li>Clique direito na faixa → <strong>Iniciar com o Windows</strong>, para ela estar lá a cada reinício.</li>
+  </ol>
+  <p>O CCT lê, só para leitura, o login que o Claude Code já salvou. Não precisa de chave de API nem de senha, e não envia nada a lugar nenhum além da consulta de uso para a Anthropic.</p>
+
+  <h2>Como ler a faixa</h2>
+  <ul>
+    <li><strong>O rótulo</strong> (por exemplo <code>P</code> ou <code>W</code>) diz de qual conta são os números. Defina em Configurações.</li>
+    <li><strong>Dois medidores</strong> mostram o % usado das janelas de 5 horas e semanal. A barra usa a cor do Claude, fica âmbar a partir de 75% e vermelha a partir de 90%.</li>
+    <li><strong>Passe o mouse</strong> para ver os horários de reset no seu fuso, os percentuais semanais de Opus e Sonnet e um aviso quando o uso extra está ligado.</li>
+    <li><strong><code>—</code> no lugar de um número</strong> significa que o CCT não conseguiu ler o limite (login expirado, serviço fora do ar). Ele nunca mostra um <code>0%</code> falso; a dica de ferramenta explica o motivo.</li>
+    <li>Prefere ver o que <strong>sobra</strong>? Ligue “Mostrar restante em vez de usado” em Configurações: <code>38%</code> restante em vez de <code>62%</code> usado.</li>
+  </ul>
+  <img src="{{root}}img/screenshot-pc-usage.png" width="699" height="43" loading="lazy"
+       alt="Linha do Gerenciador de Tarefas para claude-codex-taskbar: 0% de CPU e 14,5 MB de memória">
+  <p class="muted">O próprio CCT não atrapalha: cerca de 15 MB de memória e CPU quase zero.</p>
+
+  <h2>Seja avisado antes de chegar ao limite</h2>
+  <p>Em Configurações, ligue “Avisar ao se aproximar do limite”. O CCT mostra uma notificação do Windows quando o uso do Claude (ou do Codex) passa de 80% ou de 95%; os dois valores são configuráveis. Os avisos ficam em silêncio enquanto você está em tela cheia e no horário de silêncio.</p>
+
+  <h2>Perguntas</h2>
+  <details class="faq">
+    <summary>Os números são os mesmos do /usage?</summary>
+    <p>Sim. O CCT lê os mesmos dados de uso que o Claude Code mostra no /usage, para a conta logada no CLI no momento.</p>
+  </details>
+  <details class="faq">
+    <summary>Uso o Claude Code pelo app desktop. O CCT encontra meu login?</summary>
+    <p>O CCT lê o login do Claude Code CLI. Quando o Claude Code é usado só pelo app desktop, o login pode ainda não ser detectado; isso está na issue #45. Fazer login uma vez pelo CLI resolve.</p>
+  </details>
+  <details class="faq">
+    <summary>Tenho duas contas do Claude. Consigo ver as duas?</summary>
+    <p>A faixa mostra a conta ativa. O menu Conta do Claude lista todas as contas salvas, com o plano e o último uso visto em cada uma, e você troca entre elas em três cliques.</p>
+  </details>
+  <details class="faq">
+    <summary>O CCT é feito pela Anthropic?</summary>
+    <p>Não. O CCT é um projeto independente, de código aberto sob licença MIT, e não tem vínculo com a Anthropic.</p>
+  </details>
+
+  <div class="note">
+    <p style="margin:0"><strong>Próximos passos:</strong> <a href="{{root}}pt-br/trocar-contas-claude-code/">trocar entre contas do Claude Code</a> · <a href="{{root}}pt-br/limites-codex-windows/">ver os limites do Codex</a> · <a href="{{repo_url}}">★ dar estrela no GitHub</a></p>
+  </div>
+</article>

@@ -1,0 +1,87 @@
+<!--
+{"title": "Como trocar entre contas do Claude Code no Windows",
+ "h1": "Como trocar entre contas do Claude Code no Windows",
+ "description": "Troque o Claude Code entre a conta pessoal e a do trabalho no Windows sem /logout e /login: três cliques, sem reiniciar, logins criptografados com DPAPI.",
+ "path": "pt-br/trocar-contas-claude-code/", "lang": "pt-BR", "kind": "article", "nav": "accounts",
+ "published": "2026-11-10",
+ "alternates": {"en": "switch-claude-code-accounts/", "pt-BR": "pt-br/trocar-contas-claude-code/"}}
+-->
+<article class="wrap narrow article">
+  <p class="crumbs"><a href="{{root}}pt-br/">CCT</a> / Guias</p>
+  <h1>Como trocar entre contas do Claude Code no Windows</h1>
+  <p class="byline">Por Pablo Chiaro Rosa, mantenedor do CCT · Atualizado em <time datetime="{{modified}}">{{modified_human}}</time></p>
+
+  <p class="answer"><strong>Resposta curta:</strong> o Claude Code guarda um login por usuário do Windows, então trocar de conta normalmente exige <code>/logout</code>, <code>/login</code> e uma ida ao navegador. Com o <a href="{{root}}pt-br/">CCT</a>, você salva cada login pago uma vez e depois troca pela barra de tarefas em três cliques: clique direito na faixa → <strong>Conta do Claude</strong> → escolha uma. O Claude Code usa a nova conta na próxima requisição, sem reiniciar.</p>
+
+  <h2>Por que trocar de conta é chato</h2>
+  <ul class="problem">
+    <li>Você esquece em qual conta o CLI está e gasta a cota errada (ou a da empresa).</li>
+    <li>Cada troca é um ciclo completo: <code>/logout</code> → <code>/login</code> → navegador → colar o código.</li>
+    <li>Os limites são por conta, então você precisa saber qual está ativa antes de ler qualquer número.</li>
+  </ul>
+
+  <h2>Suas opções no Windows</h2>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th scope="col">Abordagem</th><th scope="col">Como funciona</th><th scope="col">Prós e contras</th></tr></thead>
+      <tbody>
+        <tr><th scope="row">Sair e entrar</th><td><code>/logout</code> e depois <code>/login</code> com a outra conta</td><td>Já vem pronto, mas é lento e fácil escolher a conta errada</td></tr>
+        <tr><th scope="row">Uma pasta de configuração por conta</th><td>Definir <code>CLAUDE_CONFIG_DIR</code> com uma pasta diferente em cada terminal</td><td>As duas contas ao mesmo tempo, mas configurações, histórico e servidores MCP ficam separados por pasta</td></tr>
+        <tr><th scope="row">Scripts de linha de comando</th><td>Scripts que guardam os logins e trocam sob comando</td><td>Rápidos para quem vive no terminal; verifique como guardam os tokens e se trocam sozinhos</td></tr>
+        <tr class="us"><th scope="row">CCT</th><td>Salve cada login uma vez e troque pela barra de tarefas</td><td>Três cliques, mostra qual conta está ativa e o uso dela; só o Claude Code CLI e só planos pagos</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Troque com o CCT, passo a passo</h2>
+  <ol class="steps">
+    <li><a href="{{root}}pt-br/#instalar">Instale o CCT</a> e faça login no Claude Code com a primeira conta.</li>
+    <li>Clique direito na faixa → <strong>Conta do Claude → Salvar conta atual</strong>.</li>
+    <li>No Claude Code, rode <code>/login</code> com a segunda conta e depois <strong>Salvar conta atual</strong> de novo.</li>
+    <li>A partir daí, clique direito → <strong>Conta do Claude</strong> → escolha a conta que quiser. Pronto.</li>
+  </ol>
+  <p>Dê a cada conta um rótulo curto em Configurações, como <code>P</code> para pessoal e <code>W</code> para trabalho. O rótulo fica antes dos medidores do Claude, então depois de uma troca você vê num relance em qual conta está. O menu lista todas as contas salvas com e-mail, plano e o último uso visto, e marca a ativa.</p>
+
+  <h2>Como ele mantém tudo seguro</h2>
+  <ul class="checks">
+    <li><strong>Criptografado no disco.</strong> Os logins salvos são criptografados com o DPAPI do Windows para o seu usuário, em <code>%APPDATA%\claude-codex-taskbar\accounts\</code>.</li>
+    <li><strong>As travas do próprio Claude Code.</strong> A troca usa os mesmos arquivos de trava do Claude Code, então os dois nunca gravam o login ao mesmo tempo.</li>
+    <li><strong>Nada se perde.</strong> A conta que você deixa é salva antes, para o token renovado não se perder; o novo login é gravado por um arquivo temporário, e tudo é restaurado se algum passo falhar.</li>
+    <li><strong>Pergunta antes de interromper.</strong> Se uma tarefa do Claude Code estiver rodando ou esperando sua resposta, o CCT pergunta antes, porque o resto dessa tarefa rodaria na nova conta.</li>
+    <li><strong>Avisa da expiração.</strong> <code>⚠ login expira em Nd</code> indica que um login salvo está perto de expirar; <code>⚠ precisa de /login</code> indica que é preciso entrar com essa conta e salvá-la de novo.</li>
+  </ul>
+
+  <h2>As regras que o CCT segue</h2>
+  <p>O CCT é para quem tem, de forma legítima, mais de uma assinatura, como um plano pessoal e outro do trabalho. Ele dá conveniência; não serve para contornar limites:</p>
+  <ul>
+    <li><strong>Só manual.</strong> Ele nunca troca sozinho, nunca faz rodízio de contas quando um limite acaba e nunca divide carga entre contas. É uma regra de projeto, cobrada na revisão de código, não uma opção.</li>
+    <li><strong>Só planos pagos.</strong> Apenas logins Pro, Max, Team e Enterprise podem ser salvos.</li>
+    <li><strong>Sem truques com tokens.</strong> O CCT nunca renova tokens por conta própria; ele reaproveita o login que o Claude Code já salvou.</li>
+  </ul>
+
+  <h2>Perguntas</h2>
+  <details class="faq">
+    <summary>Preciso reiniciar o Claude Code depois de trocar?</summary>
+    <p>Não. O Claude Code usa o novo login na próxima requisição.</p>
+  </details>
+  <details class="faq">
+    <summary>A troca vale também para o app desktop do Claude?</summary>
+    <p>Não. A troca muda o login do claude CLI (~/.claude/.credentials.json). O app desktop do Claude mantém o próprio login.</p>
+  </details>
+  <details class="faq">
+    <summary>Funciona com CLAUDE_CONFIG_DIR?</summary>
+    <p>Ainda não. A troca de contas não é suportada quando CLAUDE_CONFIG_DIR está definido.</p>
+  </details>
+  <details class="faq">
+    <summary>Consigo trocar contas do Codex?</summary>
+    <p>Ainda não. Uma troca de contas do Codex com as mesmas regras está no roadmap. O CCT já mostra o uso do Codex do login atual.</p>
+  </details>
+  <details class="faq">
+    <summary>A Anthropic permite isso?</summary>
+    <p>O CCT só faz o que você faria à mão com /logout e /login, para contas que são suas e só quando você clica. Confira se o seu uso segue os termos da Anthropic; compartilhar logins ou revender acesso não segue.</p>
+  </details>
+
+  <div class="note">
+    <p style="margin:0"><strong>Próximos passos:</strong> <a href="{{root}}pt-br/uso-claude-code-windows/">ler os medidores de uso</a> · <a href="{{root}}pt-br/limites-codex-windows/">ver os limites do Codex</a> · <a href="{{repo_url}}">★ dar estrela no GitHub</a></p>
+  </div>
+</article>

@@ -42,8 +42,9 @@ NAV = {
            ("codex", "codex-usage-limits-windows/", "Codex usage"),
            ("accounts", "switch-claude-code-accounts/", "Switch accounts"),
            ("changelog", "changelog/", "Changelog"), ("contribute", "contribute/", "Contribute")],
-    "pt-BR": [("home", "pt-br/", "Início"), ("claude", "claude-code-usage-windows/", "Uso do Claude (en)"),
-              ("accounts", "switch-claude-code-accounts/", "Trocar contas (en)"),
+    "pt-BR": [("home", "pt-br/", "Início"), ("claude", "pt-br/uso-claude-code-windows/", "Uso do Claude"),
+              ("codex", "pt-br/limites-codex-windows/", "Uso do Codex"),
+              ("accounts", "pt-br/trocar-contas-claude-code/", "Trocar contas"),
               ("changelog", "changelog/", "Novidades (en)"), ("contribute", "contribute/", "Contribuir (en)")],
 }
 UI = {
@@ -289,6 +290,14 @@ def nav_html(lang: str, current: str) -> str:
     return "\n        ".join(links)
 
 
+def lang_switch_href(lang: str, alternates: dict) -> str:
+    """The language switch goes to the same page in the other language, else to its home."""
+    other = "en" if lang == "pt-BR" else "pt-BR"
+    if other in alternates:
+        return ROOT + alternates[other]
+    return ROOT + UI[lang]["lang_path"]
+
+
 def issues_html(issues: list[dict] | None) -> str:
     if not issues:
         return (f'<p>See the <a href="{REPO_URL}/issues?q=is%3Aopen+label%3A%22help+wanted%22">'
@@ -430,7 +439,7 @@ def build(out: Path, offline: bool = False) -> list[dict]:
             "nav": nav_html(lang, meta.get("nav", "")), "body": body,
             "skip": ui["skip"], "star": ui["star"], "nav_label": ui["nav"], "footer": ui["footer"],
             "made": ui["made"], "source": ui["source"], "lang_name": ui["lang_name"],
-            "lang_href": ROOT + ui["lang_path"], "lang_other": "en" if lang == "pt-BR" else "pt-BR",
+            "lang_href": lang_switch_href(lang, alternates), "lang_other": "en" if lang == "pt-BR" else "pt-BR",
         })
         dest = out / meta["path"] / "index.html" if not meta.get("file") else out / meta["file"]
         dest.parent.mkdir(parents=True, exist_ok=True)

@@ -1,0 +1,63 @@
+<!--
+{"title": "Como ver os limites de uso do OpenAI Codex no Windows",
+ "h1": "Como ver os limites de uso do OpenAI Codex no Windows",
+ "description": "Veja os limites de 5 horas e semanal do Codex CLI no Windows 11 e 10: o comando /status, ou um medidor na barra de tarefas ao lado do Claude Code.",
+ "path": "pt-br/limites-codex-windows/", "lang": "pt-BR", "kind": "article", "nav": "codex",
+ "published": "2026-11-10",
+ "alternates": {"en": "codex-usage-limits-windows/", "pt-BR": "pt-br/limites-codex-windows/"}}
+-->
+<article class="wrap narrow article">
+  <p class="crumbs"><a href="{{root}}pt-br/">CCT</a> / Guias</p>
+  <h1>Como ver os limites de uso do OpenAI Codex no Windows</h1>
+  <p class="byline">Por Pablo Chiaro Rosa, mantenedor do CCT · Atualizado em <time datetime="{{modified}}">{{modified_human}}</time></p>
+
+  <p class="answer"><strong>Resposta curta:</strong> rode <code>/status</code> dentro do Codex CLI para ver o uso atual das janelas de 5 horas e semanal. Para deixar esses números na tela, use o <a href="{{root}}pt-br/">CCT</a>: ele mostra os limites do Codex do seu login atual do <code>codex</code> na barra de tarefas do Windows, ao lado do Claude Code, atualizados a cada 2 minutos.</p>
+
+  <h2>Quais são os limites do Codex</h2>
+  <p>Quando você entra no Codex CLI com um plano do ChatGPT, o uso do Codex é medido numa <strong>janela de 5 horas</strong> e numa <strong>janela semanal</strong>, parecido com o Claude Code. Os limites são da conta do ChatGPT com que você entrou, então a conta pessoal e a do trabalho têm cada uma os seus.</p>
+
+  <h2>Dois jeitos de ver no Windows</h2>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th scope="col">Jeito</th><th scope="col">Onde</th><th scope="col">Sempre visível</th><th scope="col">Claude Code no mesmo lugar</th><th scope="col">Alertas</th></tr></thead>
+      <tbody>
+        <tr><th scope="row"><code>/status</code> no Codex</th><td>Dentro de uma sessão do Codex</td><td class="n">Não, só quando você pede</td><td class="n">Não</td><td class="n">Não</td></tr>
+        <tr class="us"><th scope="row">CCT na barra de tarefas</th><td>Barra de tarefas do Windows 11</td><td class="y">Sim, atualizado a cada 2 min</td><td class="y">Sim, lado a lado</td><td class="y">Opcionais, em 80% / 95%</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Como configurar</h2>
+  <ol class="steps">
+    <li>Entre no Codex CLI com sua conta do ChatGPT no mesmo usuário do Windows (rode <code>codex</code> e siga o login).</li>
+    <li>Baixe o CCT da <a href="{{release_url}}">versão mais recente</a>, extraia o <code>claude-codex-taskbar.exe</code> para uma pasta fixa e execute.</li>
+    <li>Em Configurações, deixe o botão do <strong>Codex</strong> ligado. Desligue o Claude Code se você só usa o Codex.</li>
+    <li>Clique direito na faixa → <strong>Iniciar com o Windows</strong>.</li>
+  </ol>
+
+  <h2>Como o CCT lê o uso do Codex</h2>
+  <ul>
+    <li><strong>Login só para leitura.</strong> O CCT lê o login que o Codex CLI salvou em <code>~/.codex/auth.json</code> e nunca grava nesse arquivo nem renova o token.</li>
+    <li><strong>Plano B sem o serviço.</strong> Se o endpoint de uso falhar, o CCT pergunta os limites ao <code>codex</code> CLI instalado e, em último caso, usa o limite mais recente que o CLI registrou nos próprios logs de sessão, se aquela janela ainda não zerou.</li>
+    <li><strong>Erros honestos.</strong> Quando nada funciona, o medidor mostra <code>—</code> com o motivo na dica de ferramenta, nunca um <code>0%</code> falso.</li>
+    <li><strong>Seu rótulo.</strong> Uma marca curta como <code>P</code> ou <code>W</code> fica antes do medidor do Codex, no azul do Codex, para você saber de qual conta são os números.</li>
+  </ul>
+
+  <h2>Perguntas</h2>
+  <details class="faq">
+    <summary>O CCT troca entre contas do Codex?</summary>
+    <p>Ainda não. Hoje a troca funciona para o Claude Code; uma troca de contas do Codex com as mesmas regras (planos pagos, só manual, criptografia local) está no roadmap.</p>
+  </details>
+  <details class="faq">
+    <summary>Precisa de chave de API da OpenAI?</summary>
+    <p>Não. Ele usa o login do ChatGPT que o Codex CLI já salvou, o mesmo que tem os limites de 5 horas e semanal.</p>
+  </details>
+  <details class="faq">
+    <summary>O CCT é feito pela OpenAI?</summary>
+    <p>Não. O CCT é um projeto independente, de código aberto sob licença MIT, e não tem vínculo com a OpenAI.</p>
+  </details>
+
+  <div class="note">
+    <p style="margin:0"><strong>Próximos passos:</strong> <a href="{{root}}pt-br/uso-claude-code-windows/">ver os limites do Claude Code</a> · <a href="{{root}}pt-br/trocar-contas-claude-code/">trocar contas do Claude Code</a> · <a href="{{repo_url}}">★ dar estrela no GitHub</a></p>
+  </div>
+</article>
