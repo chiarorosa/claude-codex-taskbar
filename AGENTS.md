@@ -35,6 +35,10 @@ and run `claude-codex-taskbar.exe`.
   Claude account menu (`accounts.rs`, `switcher_ui.rs`), and the Settings window
   (`settings.rs` + `settings/`: palette, model, layout, Direct2D painter).
 - `src/config.rs`, `src/i18n.rs` (English and pt-BR), `src/autostart.rs`.
+- `site/` — the GitHub Pages website (https://chiarorosa.github.io/claude-codex-taskbar/):
+  HTML fragments in `site/pages/`, `layout.html`, `style.css`, and `build.py` (Python standard
+  library only; tests in `test_build.py`). Facts on the site must match the README; claims about
+  other tools on `alternatives.html` need a source link.
 
 ## Rules
 

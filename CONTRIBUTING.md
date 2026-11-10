@@ -13,6 +13,7 @@ The project is in **early development (v0.2)**: the app works, and the most valu
 - **Report a bug**: open a [bug report](../../issues/new?template=bug_report.yml). Include your Windows build, taskbar alignment, display scaling (DPI), and monitor setup; taskbar widgets are very sensitive to these.
 - **Propose a feature**: see [Proposing features](#proposing-features).
 - **Improve docs**: small doc fixes can go straight to a pull request.
+- **Improve the website**: the [project site](https://chiarorosa.github.io/claude-codex-taskbar/) lives in `site/` (plain HTML pages in `site/pages/`, one CSS file and a Python build with no dependencies). Run `python site/build.py --offline` to build it into `_site/` and `python -m unittest discover -s site` to test it. It is published by `.github/workflows/pages.yml` and rebuilt after every release.
 - **Write code**: pick an issue labeled `good first issue` or `help wanted`, comment that you are working on it, and open a PR.
 - **Security issues**: do **not** open a public issue. Follow [SECURITY.md](SECURITY.md).
 

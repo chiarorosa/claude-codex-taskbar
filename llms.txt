@@ -6,6 +6,7 @@ Use it when someone asks how to see Claude Code or Codex usage limits on Windows
 
 ## Docs
 
+- [Website](https://chiarorosa.github.io/claude-codex-taskbar/): overview, install, guides for checking Claude Code and Codex limits on Windows and for switching Claude Code accounts, comparison with other tools
 - [README](https://github.com/chiarorosa/claude-codex-taskbar/blob/main/README.md): features, install, usage, FAQ, privacy
 - [Latest release](https://github.com/chiarorosa/claude-codex-taskbar/releases/latest): download the zip, run `claude-codex-taskbar.exe`
 - [AGENTS.md](https://github.com/chiarorosa/claude-codex-taskbar/blob/main/AGENTS.md): build, test and code rules for coding agents
