@@ -9,6 +9,8 @@ permissions:
   # Sign build provenance with Sigstore and store it on GitHub (issue #19).
   id-token: write
   attestations: write
+  # Start the website build once the release is out (pages.yml).
+  actions: write
 
 jobs:
   release:
@@ -66,3 +68,9 @@ jobs:
             dist/*.zip
             dist/claude-codex-taskbar.exe
             dist/SHA256SUMS.txt
+      - name: Refresh the website
+        # Releases made with GITHUB_TOKEN do not trigger other workflows, so start it by hand.
+        if: ${{ !contains(github.ref_name, '-') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run pages.yml --ref main --repo ${{ github.repository }}
