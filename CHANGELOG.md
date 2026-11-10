@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-10
+
 ### Added
 - **Show remaining instead of used (opt-in).** A Settings switch that shows what is left of each
   limit (`38%` instead of `62%`, `38% left` in the tooltip). Bar colors still follow usage, and
@@ -22,15 +24,15 @@ All notable changes to this project are documented here. The format follows
   - A proxy variable with a scheme WinHTTP can't use (`socks5://`, `https://`) now fails the
     request instead of quietly going direct.
   - A server that accepts the connection and never answers ends the request in at most ~12 s
-    (WinHTTP rounds its timeouts to ~4 s steps) instead of exactly 10 s (#83).
+    (WinHTTP rounds its timeouts to ~4 s steps) instead of exactly 10 s (#83, #84).
 - **Right-click menu.** Items are grouped (Refresh now and Copy usage; Claude account;
   Settings… and Start with Windows; Exit), Refresh now is the bold default like the
   double-click, and every item has a one-letter shortcut shown on its right. The letters are
-  the same in every language (#58).
+  the same in every language (#58, #82).
 
 ### Fixed
 - **The strip no longer covers its own right-click menu** a few seconds after it opens over
-  the strip.
+  the strip (#82).
 - **Keep-alive no longer kills what the CLI leaves running on success.** The process tree is
   still killed when the CLI times out (#75, #81, thanks @FramY2).
 
@@ -160,7 +162,8 @@ All notable changes to this project are documented here. The format follows
   5-hour/weekly limits, tooltip with reset times, settings window, start with Windows,
   English and Brazilian Portuguese UI.
 
-[Unreleased]: https://github.com/chiarorosa/claude-codex-taskbar/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/chiarorosa/claude-codex-taskbar/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/chiarorosa/claude-codex-taskbar/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/chiarorosa/claude-codex-taskbar/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/chiarorosa/claude-codex-taskbar/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/chiarorosa/claude-codex-taskbar/compare/v0.2.0...v0.2.1
