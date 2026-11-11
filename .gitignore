@@ -37,3 +37,6 @@ $RECYCLE.BIN/
 # Local environment files (never commit credentials)
 .env
 .env.*
+
+# MSIX build output (packaging/build-msix.ps1)
+/dist-msix/

@@ -51,14 +51,37 @@ jobs:
             [IO.File]::AppendAllText("$PWD/dist/SHA256SUMS.txt", "$hash  $($_.Name)`n")
           }
           Get-Content dist/SHA256SUMS.txt
+      - name: MSIX package for the Microsoft Store
+        shell: pwsh
+        env:
+          # Partner Center → the app → Product identity. Until they are set (repository
+          # variables), the package carries the local test identity and is not for the Store.
+          MSIX_IDENTITY_NAME: ${{ vars.MSIX_IDENTITY_NAME }}
+          MSIX_PUBLISHER: ${{ vars.MSIX_PUBLISHER }}
+          MSIX_PUBLISHER_DISPLAY_NAME: ${{ vars.MSIX_PUBLISHER_DISPLAY_NAME }}
+        run: |
+          $identity = @{}
+          if ($env:MSIX_IDENTITY_NAME) { $identity.IdentityName = $env:MSIX_IDENTITY_NAME }
+          if ($env:MSIX_PUBLISHER) { $identity.Publisher = $env:MSIX_PUBLISHER }
+          if ($env:MSIX_PUBLISHER_DISPLAY_NAME) { $identity.PublisherDisplayName = $env:MSIX_PUBLISHER_DISPLAY_NAME }
+          ./packaging/build-msix.ps1 @identity
       - name: Attest build provenance
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: |
             dist/claude-codex-taskbar.exe
             dist/*.zip
+            dist-msix/*.msix
           # Nothing is pushed to a registry, so no storage record and no extra permission.
           create-storage-record: false
+      - name: Keep the MSIX for the Store submission
+        # Unsigned (the Store signs it), so it is a workflow artifact, not a release download.
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: msix-${{ github.ref_name }}
+          path: dist-msix/*.msix
+          if-no-files-found: error
+          retention-days: 90
       - name: Publish
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:

@@ -1,4 +1,5 @@
-//! "Start with Windows" via the per-user Run key.
+//! "Start with Windows": the per-user Run key for the portable `.exe`, or the package's
+//! startup task when CCT runs from its MSIX package (#5), where a Run entry is ignored.
 
 use std::io;
 use std::path::{Path, PathBuf};
@@ -46,15 +47,39 @@ fn read_value_named(name: &str) -> Option<String> {
     Some(String::from_utf16_lossy(&buf[..len]))
 }
 
-/// True only when the Run entry points at this executable.
 pub fn is_enabled() -> bool {
+    if crate::packaged::is_packaged() {
+        crate::packaged::startup_task_enabled()
+    } else {
+        run_key_enabled()
+    }
+}
+
+pub fn enable() -> io::Result<()> {
+    if crate::packaged::is_packaged() {
+        crate::packaged::enable_startup_task()
+    } else {
+        enable_run_key()
+    }
+}
+
+pub fn disable() -> io::Result<()> {
+    if crate::packaged::is_packaged() {
+        crate::packaged::disable_startup_task()
+    } else {
+        delete_value(VALUE_NAME)
+    }
+}
+
+/// True only when the Run entry points at this executable.
+fn run_key_enabled() -> bool {
     match (read_value_named(VALUE_NAME), current_exe()) {
         (Some(value), Ok(exe)) => value_matches(&value, &exe),
         _ => false,
     }
 }
 
-pub fn enable() -> io::Result<()> {
+fn enable_run_key() -> io::Result<()> {
     let value: Vec<u16> = autostart_value(&current_exe()?)
         .encode_utf16()
         .chain(std::iter::once(0))
@@ -74,10 +99,6 @@ pub fn enable() -> io::Result<()> {
     .map_err(io::Error::other)
 }
 
-pub fn disable() -> io::Result<()> {
-    delete_value(VALUE_NAME)
-}
-
 fn delete_value(name: &str) -> io::Result<()> {
     // SAFETY: plain registry call.
     unsafe {
@@ -92,9 +113,14 @@ fn delete_value(name: &str) -> io::Result<()> {
 }
 
 /// If v0.1.x registered "Start with Windows", move that entry to the new name and exe.
+/// Portable build only: inside the package the delete would never stick, and the startup
+/// task would be turned on again at every launch.
 pub fn migrate_legacy() {
-    if read_value_named(LEGACY_VALUE_NAME).is_some() && delete_value(LEGACY_VALUE_NAME).is_ok() {
-        let _ = enable();
+    if !crate::packaged::is_packaged()
+        && read_value_named(LEGACY_VALUE_NAME).is_some()
+        && delete_value(LEGACY_VALUE_NAME).is_ok()
+    {
+        let _ = enable_run_key();
     }
 }
 

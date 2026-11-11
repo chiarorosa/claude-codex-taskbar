@@ -7,5 +7,6 @@ pub mod i18n;
 pub mod limits;
 pub mod migrate;
 pub mod model;
+pub mod packaged;
 pub mod timeutil;
 pub mod ui;

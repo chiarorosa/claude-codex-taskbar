@@ -51,11 +51,11 @@ UI = {
     "en": {"skip": "Skip to content", "star": "Star on GitHub", "nav": "Main",
            "footer": "CCT is not affiliated with, endorsed by, or sponsored by Anthropic or OpenAI. "
                      "“Claude”, “Claude Code” and “Codex” are trademarks of their owners.",
-           "made": "Free and open source (MIT) by", "source": "Source", "lang_name": "Português", "lang_path": "pt-br/"},
+           "made": "Free and open source (MIT) by", "source": "Source", "privacy": "Privacy", "lang_name": "Português", "lang_path": "pt-br/"},
     "pt-BR": {"skip": "Pular para o conteúdo", "star": "Estrela no GitHub", "nav": "Principal",
               "footer": "O CCT não é afiliado, endossado nem patrocinado pela Anthropic ou pela OpenAI. "
                         "“Claude”, “Claude Code” e “Codex” são marcas de seus donos.",
-              "made": "Gratuito e de código aberto (MIT), por", "source": "Código", "lang_name": "English", "lang_path": ""},
+              "made": "Gratuito e de código aberto (MIT), por", "source": "Código", "privacy": "Privacidade (en)", "lang_name": "English", "lang_path": ""},
 }
 
 META_RE = re.compile(r"\A\s*<!--(.*?)-->", re.S)
@@ -438,7 +438,7 @@ def build(out: Path, offline: bool = False) -> list[dict]:
             "verification": verification, "css": css, "jsonld": jsonld(meta, body, facts),
             "nav": nav_html(lang, meta.get("nav", "")), "body": body,
             "skip": ui["skip"], "star": ui["star"], "nav_label": ui["nav"], "footer": ui["footer"],
-            "made": ui["made"], "source": ui["source"], "lang_name": ui["lang_name"],
+            "made": ui["made"], "source": ui["source"], "privacy": ui["privacy"], "lang_name": ui["lang_name"],
             "lang_href": lang_switch_href(lang, alternates), "lang_other": "en" if lang == "pt-BR" else "pt-BR",
         })
         dest = out / meta["path"] / "index.html" if not meta.get("file") else out / meta["file"]

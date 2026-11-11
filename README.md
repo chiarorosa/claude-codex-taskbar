@@ -101,12 +101,15 @@ gh attestation verify claude-codex-taskbar.exe --repo chiarorosa/claude-codex-ta
 
 Build from source: `cargo build --release` (see [CONTRIBUTING.md](CONTRIBUTING.md)).
 
+**Microsoft Store:** a signed, auto-updated Store version is in preparation ([#5](https://github.com/chiarorosa/claude-codex-taskbar/issues/5)). The MSIX package is built and tested in CI ([packaging/README.md](packaging/README.md)); the portable `.exe` stays.
+
 ## Privacy
 
 - **Zero telemetry.** No analytics, no crash reports, no update checks, nothing sent to the maintainers. Ever.
 - **Network access only to the providers' own usage endpoints**, and only for the providers you enable.
 - **Credentials stay on your PC.** Read-only, except the Claude login, which is written only when you pick an account to switch to (*Save current account* only reads it). Tokens are never logged, copied or sent anywhere except to their own provider.
 - Settings and saved accounts live locally in `%APPDATA%\claude-codex-taskbar\`.
+- Full [privacy policy](https://chiarorosa.github.io/claude-codex-taskbar/privacy/): what CCT reads, sends and stores.
 - If `config.json` cannot be parsed, CCT tries to preserve its original bytes in `config.json.bad` (replacing an older backup) before loading defaults. You can recover your settings from that copy; a missing file on first run creates no backup.
 
 ## Roadmap

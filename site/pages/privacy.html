@@ -1,0 +1,44 @@
+<!--
+{"title": "Privacy policy · CCT",
+ "h1": "Privacy policy",
+ "description": "CCT has no telemetry. It reads your Claude Code and Codex logins on your PC and sends them only to each provider's own usage endpoint.",
+ "path": "privacy/", "lang": "en", "kind": "page"}
+-->
+<article class="wrap article">
+  <div class="narrow" style="margin-inline:0">
+    <p class="crumbs"><a href="{{root}}">CCT</a> / Privacy</p>
+    <h1>Privacy policy</h1>
+    <p class="lead">CCT runs only on your PC. It collects nothing about you, and the maintainers never receive any data from it. This applies to the download from GitHub and to the Microsoft Store package alike.</p>
+
+    <h2>What CCT does not do</h2>
+    <ul>
+      <li><strong>No telemetry.</strong> No analytics, no crash reports, no update checks, no advertising IDs. Nothing is sent to the maintainers. Ever.</li>
+      <li>No account, no sign-up, no server of its own.</li>
+    </ul>
+
+    <h2>What it reads on your PC</h2>
+    <ul>
+      <li>The Claude Code login in <code>%USERPROFILE%\.claude\.credentials.json</code> and the Codex login in <code>%USERPROFILE%\.codex\auth.json</code> (or <code>%CODEX_HOME%</code>), to ask each provider for your usage. When the Codex endpoint can't be reached, it reads the Codex CLI's recent session logs, only for the limits they record.</li>
+      <li>CPU, RAM, GPU and disk activity, from Windows performance counters, shown on the taskbar and never sent anywhere.</li>
+    </ul>
+
+    <h2>What it sends, and where</h2>
+    <ul>
+      <li>Your Claude Code token goes only to Anthropic, at <code>https://api.anthropic.com/api/oauth/usage</code>. Your Codex token goes only to OpenAI, at <code>https://chatgpt.com/backend-api/wham/usage</code>. Each is sent only when you enable that provider, and only to read your usage limits.</li>
+      <li>When the Codex endpoint fails, CCT may ask the Codex CLI itself (<code>codex app-server</code>), which contacts OpenAI on its own. The opt-in <em>Keep login active</em> runs each CLI's own status command (<code>claude auth status</code>, <code>codex login status</code>). No prompt is sent and no quota is used.</li>
+      <li>Those requests follow each provider's own privacy policy. CCT adds nothing to them beyond its name and version in the <code>User-Agent</code>.</li>
+    </ul>
+
+    <h2>What it stores, and where</h2>
+    <ul>
+      <li>Settings, in <code>%APPDATA%\claude-codex-taskbar\</code>.</li>
+      <li>Only if you use the Claude account switcher: the logins you choose to save, encrypted with Windows DPAPI for your Windows user, in <code>%APPDATA%\claude-codex-taskbar\accounts\</code>. A switch writes the Claude Code login (<code>~/.claude/.credentials.json</code> and the account name in <code>~/.claude.json</code>) only when you pick an account.</li>
+      <li>Tokens are never logged, copied anywhere else, or sent to anyone other than their own provider.</li>
+    </ul>
+    <p>Uninstalling the Microsoft Store package removes the data it created. With the portable <code>.exe</code>, delete the folder above to remove everything.</p>
+
+    <h2>Contact</h2>
+    <p>Questions or concerns: open an issue at <a href="{{repo_url}}/issues">{{repo_url}}/issues</a>. Security reports: see <a href="{{repo_url}}/blob/main/SECURITY.md">SECURITY.md</a>.</p>
+    <p class="muted">Last updated {{modified_human}}.</p>
+  </div>
+</article>

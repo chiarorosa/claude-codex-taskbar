@@ -34,6 +34,8 @@ and run `claude-codex-taskbar.exe`.
 - `src/ui/` — layout math, taskbar geometry, view model, Direct2D renderer, strip window,
   Claude account menu (`accounts.rs`, `switcher_ui.rs`), and the Settings window
   (`settings.rs` + `settings/`: palette, model, layout, Direct2D painter).
+- `src/packaged.rs` (MSIX detection and startup task) and `packaging/` (MSIX manifest and
+  `build-msix.ps1`, #5).
 - `src/config.rs`, `src/i18n.rs` (English, pt-BR and Spanish), `src/autostart.rs`.
 - `site/` — the GitHub Pages website (https://chiarorosa.github.io/claude-codex-taskbar/):
   HTML fragments in `site/pages/`, `layout.html`, `style.css`, and `build.py` (Python standard

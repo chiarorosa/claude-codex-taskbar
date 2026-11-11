@@ -7,6 +7,11 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **MSIX package for the Microsoft Store (in preparation).** CI now builds, signs with a test
+  certificate, installs and launches the package. Inside it, *Start with Windows* uses the
+  package's startup task instead of the Run key. The Release workflow keeps an unsigned package
+  for the Store submission, and the website has a privacy policy page. The portable `.exe` is
+  unchanged (#5).
 - **Spanish.** CCT now speaks Spanish when the Windows display language is any Spanish variant
   (Spain, Mexico, Argentina, US, ...). Each string now holds one entry per language, so adding
   another language no longer means touching every lookup (#35).

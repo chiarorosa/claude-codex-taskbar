@@ -39,3 +39,28 @@ jobs:
             Write-Output "::error::claude-codex-taskbar.exe is $size bytes, over the $limit-byte budget"
             exit 1
           }
+      - name: MSIX package (pack, sign with a throwaway certificate, install, launch, remove)
+        shell: pwsh
+        run: |
+          # The runner is thrown away, so the test certificate and the install never outlive it.
+          ./packaging/build-msix.ps1 -Sign
+          $msix = Get-ChildItem dist-msix -Filter *.msix | Select-Object -First 1
+          Import-Certificate -FilePath dist-msix/CCT-LocalTest.cer -CertStoreLocation Cert:\LocalMachine\TrustedPeople | Out-Null
+          Add-AppxPackage -Path $msix.FullName
+          $pkg = Get-AppxPackage -Name CCT.LocalTest
+          if (-not $pkg) { throw "the MSIX package did not install" }
+          $line = "MSIX: $($msix.Name), $($msix.Length) bytes, installed as $($pkg.PackageFullName)"
+          Write-Output $line
+          if ($env:GITHUB_STEP_SUMMARY) { Add-Content $env:GITHUB_STEP_SUMMARY $line }
+          Start-Process "shell:AppsFolder\$($pkg.PackageFamilyName)!CCT"
+          Start-Sleep -Seconds 5
+          $proc = Get-Process claude-codex-taskbar -ErrorAction SilentlyContinue |
+            Where-Object { $_.Path -like "*\WindowsApps\*" }
+          if ($proc) {
+            Write-Output "packaged app is running from $($proc[0].Path)"
+            $proc | Stop-Process -Force
+          } else {
+            # The runner has no interactive taskbar, so the app may legitimately not stay up.
+            Write-Output "::warning::the packaged app was not running 5 s after launch on the runner"
+          }
+          Remove-AppxPackage -Package $pkg.PackageFullName
