@@ -12,7 +12,7 @@
 
 **Personal account or work account? Always know which Claude Code / Codex account you are on, how much of its quota is left, and switch between your accounts in three clicks, right from your taskbar.**
 
-**Website:** [chiarorosa.github.io/claude-codex-taskbar](https://chiarorosa.github.io/claude-codex-taskbar/) · **Platforms:** Windows 11 / 10 today · macOS coming soon · Linux not yet
+**Website:** [chiarorosa.github.io/claude-codex-taskbar](https://chiarorosa.github.io/claude-codex-taskbar/) · **Why I built it:** [the story on DEV](https://dev.to/chiarorosa/personal-account-or-work-account-a-610-kb-windows-taskbar-widget-for-claude-code-and-codex-2dl8) · **Platforms:** Windows 11 / 10 today · macOS coming soon · Linux not yet
 
 **Windows version:**
 
