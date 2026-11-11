@@ -20,6 +20,9 @@ All notable changes to this project are documented here. The format follows
   `codex app-server` (#87).
 
 ### Changed
+- **20 KB smaller.** Percentages are now rounded by CCT's own code, with the exact text the
+  standard formatter gave, and menu access keys and plan names compare ASCII. That keeps the
+  standard library's float formatter and Unicode case tables out of the `.exe` (#83).
 - **No pointless `codex` process while offline.** When the Codex usage endpoint can't be reached
   at all (name not found, connection refused), CCT goes straight to the session logs instead of
   starting `codex app-server`, which needs the same network. Timeouts and TLS errors still try

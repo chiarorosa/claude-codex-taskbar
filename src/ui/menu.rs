@@ -78,7 +78,9 @@ pub fn text(lang: Lang, key: Key) -> String {
         return format!("{label}{ellipsis}");
     };
     let upper = letter.to_ascii_uppercase();
-    let is = |c: char| c.to_lowercase().eq(letter.to_lowercase());
+    // Access letters are ASCII, so an ASCII compare is enough and keeps the Unicode case
+    // tables out of the binary (#83).
+    let is = |c: char| c.to_ascii_lowercase() == letter;
     let chars: Vec<(usize, char)> = label.char_indices().collect();
     let word_start = chars
         .iter()
@@ -235,6 +237,23 @@ mod tests {
         assert_eq!(text(Lang::PtBr, Key::MenuSettings), "Configuraçõe&s…	S");
         assert_eq!(text(Lang::Es, Key::MenuRefresh), "Actualiza&r ahora	R");
         assert_eq!(text(Lang::Es, Key::MenuExit), "Salir	&X");
+    }
+
+    #[test]
+    fn access_letters_are_ascii_and_the_ascii_compare_matches_unicode_lowercase() {
+        for key in MENU_KEYS {
+            let letter = access_letter(key).unwrap();
+            assert!(letter.is_ascii_lowercase(), "{key:?}");
+            for lang in LANGS {
+                for c in t(lang, key).chars() {
+                    assert_eq!(
+                        c.to_ascii_lowercase() == letter,
+                        c.to_lowercase().eq(letter.to_lowercase()),
+                        "{c:?} in {key:?} {lang:?}"
+                    );
+                }
+            }
+        }
     }
 
     #[test]

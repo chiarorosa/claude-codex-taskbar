@@ -124,10 +124,12 @@ pub fn last_seen_from(status: &ProviderStatus) -> Option<LastSeen> {
     }
 }
 
+/// `max` → `Max`. Plan names are ASCII; an ASCII uppercase keeps the Unicode case tables out
+/// of the binary (#83).
 fn plan_name(plan: &str) -> String {
     let mut chars = plan.chars();
     match chars.next() {
-        Some(first) => first.to_uppercase().chain(chars).collect(),
+        Some(first) => first.to_ascii_uppercase().to_string() + chars.as_str(),
         None => String::new(),
     }
 }
@@ -157,10 +159,10 @@ pub fn entry_label(
     let mut parts = vec![format!("{slot_email} ({})", plan_name(plan))];
     if !active && let Some(seen) = seen {
         if let Some(p) = seen.five_hour_pct {
-            parts.push(format!("5h {p:.0}%"));
+            parts.push(format!("5h {}%", super::view::fmt_round(p)));
         }
         if let Some(p) = seen.weekly_pct {
-            parts.push(format!("7d {p:.0}%"));
+            parts.push(format!("7d {}%", super::view::fmt_round(p)));
         }
         parts.push(ago(now - seen.at, lang));
     }
@@ -212,6 +214,19 @@ pub fn save_error_text(lang: Lang, err: &SaveError) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn plan_names_get_a_capital_like_before() {
+        for plan in ["pro", "max", "team", "enterprise", "Max", "", "x"] {
+            let unicode: String = {
+                let mut c = plan.chars();
+                c.next()
+                    .map(|f| f.to_uppercase().chain(c).collect())
+                    .unwrap_or_default()
+            };
+            assert_eq!(plan_name(plan), unicode, "{plan:?}");
+        }
+    }
     use crate::limits::FetchError;
     use crate::limits::switcher::Secret;
     use crate::limits::switcher::store::Slot;

@@ -49,9 +49,30 @@ impl ItemView {
 
 pub fn value_text(value: Option<f32>, remaining: bool) -> String {
     match value {
-        Some(v) => format!("{:.0}%", if remaining { 100.0 - v } else { v }),
+        Some(v) => format!("{}%", fmt_round(if remaining { 100.0 - v } else { v })),
         None => "—".into(),
     }
+}
+
+/// `format!("{:.0}", v)` without the standard library's float formatter (#83): the same text
+/// for every `f32`. Finite values fit a `u128` (`f32::MAX` < 2^128), the fraction test is
+/// exact in `f64`, and a tie rounds to even, as `{:.0}` does.
+pub fn fmt_round(v: f32) -> String {
+    if v.is_nan() {
+        return "NaN".into();
+    }
+    let sign = if v.is_sign_negative() { "-" } else { "" };
+    if v.is_infinite() {
+        return format!("{sign}inf");
+    }
+    let x = f64::from(v).abs();
+    let whole = x.floor();
+    let frac = x - whole;
+    let mut n = whole as u128;
+    if frac > 0.5 || (frac == 0.5 && n % 2 == 1) {
+        n += 1;
+    }
+    format!("{sign}{n}")
 }
 
 fn usage_of(status: &ProviderStatus) -> Option<(&ProviderUsage, bool)> {
@@ -447,6 +468,53 @@ mod tests {
                     "{tip}"
                 );
             }
+        }
+    }
+
+    #[test]
+    fn fmt_round_matches_the_standard_formatter_for_every_kind_of_f32() {
+        let check = |v: f32| {
+            assert_eq!(
+                fmt_round(v),
+                format!("{v:.0}"),
+                "{v:?} ({:#x})",
+                v.to_bits()
+            )
+        };
+        // Ties round to even, both signs; -0 keeps its sign like `{:.0}`.
+        for k in -2000..=2000 {
+            check(k as f32 / 2.0);
+        }
+        for v in [
+            0.0,
+            -0.0,
+            0.49999997,
+            0.5,
+            0.50000006,
+            99.5,
+            100.5,
+            62.4,
+            37.6,
+            1e-45,
+            16_777_215.5,
+            16_777_216.0,
+            3.0e38,
+            f32::MAX,
+            f32::MIN,
+            f32::MIN_POSITIVE,
+            f32::EPSILON,
+            f32::INFINITY,
+            f32::NEG_INFINITY,
+            f32::NAN,
+        ] {
+            check(v);
+        }
+        // Every percentage a provider can send, at 1/1024 steps, and a spread of bit patterns.
+        for k in 0..=110 * 1024 {
+            check(k as f32 / 1024.0);
+        }
+        for bits in (0..=u32::MAX).step_by(4099) {
+            check(f32::from_bits(bits));
         }
     }
 
