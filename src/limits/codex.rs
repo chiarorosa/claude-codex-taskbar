@@ -366,7 +366,7 @@ impl CodexProvider {
     }
 
     /// Falls back to `codex app-server` and then session logs only for transient failures,
-    /// never for auth problems. After an app-server failure that tier is skipped for a
+    /// never for auth problems. With no network at all, only the session logs are tried. After an app-server failure that tier is skipped for a
     /// doubling back-off, reset by any live success.
     pub fn fetch_with_fallback(&self, now: i64) -> Result<CodexFetch, FetchError> {
         self.fetch_with_tiers(now, |now| self.fetch_at(now), || self.fetch_app_server())
@@ -383,9 +383,14 @@ impl CodexProvider {
                 self.app_server_backoff.set(Backoff::default());
                 Ok((usage, false, now))
             }
-            Err(err @ (FetchError::Network(_) | FetchError::BadResponse(_))) => {
+            Err(
+                err
+                @ (FetchError::Network(_) | FetchError::BadResponse(_) | FetchError::Offline(_)),
+            ) => {
+                // The CLI needs the same network, so an offline error skips straight to the
+                // session logs and leaves the back-off alone: the app-server wasn't tried (#106).
                 let backoff = self.app_server_backoff.get();
-                if backoff.allows(now) {
+                if !matches!(err, FetchError::Offline(_)) && backoff.allows(now) {
                     match app_server() {
                         Ok(usage) => {
                             self.app_server_backoff.set(Backoff::default());
@@ -1127,6 +1132,45 @@ mod tests {
             .unwrap();
         fetch_at(t1 + 61).unwrap();
         assert_eq!(calls.get(), 3, "an HTTP success resets the back-off");
+    }
+
+    #[test]
+    fn offline_http_error_skips_the_app_server_without_touching_the_backoff() {
+        let dir = sessions_dir("offline", SESSION);
+        let provider = CodexProvider::new(dir.parent().unwrap().to_path_buf());
+        let calls = Cell::new(0);
+        let offline = |_: i64| Err(FetchError::Offline("host not found".into()));
+        let app_fails = || {
+            calls.set(calls.get() + 1);
+            Err(FetchError::Network("app-server failed".into()))
+        };
+        let t0 = SESSION_NOW;
+
+        let (_, from_session, _) = provider.fetch_with_tiers(t0, offline, app_fails).unwrap();
+        assert!(from_session, "still falls back to the session logs");
+        assert_eq!(calls.get(), 0, "no app-server spawn while offline");
+
+        // Not counted as an app-server failure: the next transient error tries it right away.
+        let http_down = |_: i64| Err(FetchError::Network("timed out".into()));
+        provider
+            .fetch_with_tiers(t0 + 1, http_down, app_fails)
+            .unwrap();
+        assert_eq!(calls.get(), 1);
+    }
+
+    #[test]
+    fn offline_without_session_logs_returns_the_offline_error() {
+        let home =
+            std::env::temp_dir().join(format!("wuw-codex-{}-offline-empty", std::process::id()));
+        let provider = CodexProvider::new(home);
+        let err = provider
+            .fetch_with_tiers(
+                SESSION_NOW,
+                |_| Err(FetchError::Offline("could not connect".into())),
+                || panic!("app-server must not run while offline"),
+            )
+            .unwrap_err();
+        assert_eq!(err, FetchError::Offline("could not connect".into()));
     }
 
     #[test]

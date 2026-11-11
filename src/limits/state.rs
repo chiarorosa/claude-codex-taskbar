@@ -15,7 +15,10 @@ pub fn next_status(
         Ok(usage) => return ProviderStatus::Ok { usage, at: now },
         Err(err) => err,
     };
-    let transient = matches!(err, FetchError::Network(_) | FetchError::BadResponse(_));
+    let transient = matches!(
+        err,
+        FetchError::Network(_) | FetchError::Offline(_) | FetchError::BadResponse(_)
+    );
     if transient
         && let ProviderStatus::Ok { usage, at } | ProviderStatus::Stale { usage, at, .. } = prev
         && now - at <= STALE_SECS
@@ -144,6 +147,24 @@ mod tests {
         let err = FetchError::Network("timeout".into());
         let s = next_status(&prev, Err(err.clone()), 1000 + 901);
         assert_eq!(s, ProviderStatus::Failed(err));
+    }
+
+    #[test]
+    fn offline_error_is_transient_like_network() {
+        let prev = ProviderStatus::Ok {
+            usage: usage(10.0),
+            at: 1000,
+        };
+        let err = FetchError::Offline("host not found".into());
+        let s = next_status(&prev, Err(err.clone()), 1000 + 899);
+        assert_eq!(
+            s,
+            ProviderStatus::Stale {
+                usage: usage(10.0),
+                at: 1000,
+                err
+            }
+        );
     }
 
     #[test]

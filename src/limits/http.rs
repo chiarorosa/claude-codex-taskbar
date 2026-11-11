@@ -20,6 +20,7 @@ use windows::Win32::Networking::WinHttp::{
     WinHttpOpen, WinHttpOpenRequest, WinHttpQueryHeaders, WinHttpReadData, WinHttpReceiveResponse,
     WinHttpSendRequest, WinHttpSetOption, WinHttpSetTimeouts,
 };
+use windows::Win32::System::Registry::{HKEY_CURRENT_USER, RRF_RT_REG_DWORD, RegGetValueW};
 use windows::core::{HSTRING, PCWSTR};
 
 const TIMEOUT: Duration = Duration::from_secs(10);
@@ -291,7 +292,10 @@ impl Policy {
 /// GETs `url` and parses JSON. 401/403 map to `Expired`. Error text never includes headers.
 pub fn get_json(url: &str, headers: &[(&str, &str)]) -> Result<serde_json::Value, FetchError> {
     let host = parse_target(url, false)?.host;
-    fetch(url, headers, &Policy::production(&host)?)
+    unless_system_proxy(
+        fetch(url, headers, &Policy::production(&host)?),
+        windows_proxy_enabled,
+    )
 }
 
 /// A WinHTTP handle, closed on drop.
@@ -314,9 +318,14 @@ impl Drop for Handle {
     }
 }
 
-/// Short, header-free text for a WinHTTP failure, shown in the tooltip.
 fn net_error(err: &windows::core::Error) -> FetchError {
-    let code = (err.code().0 as u32) & 0xFFFF;
+    winhttp_error((err.code().0 as u32) & 0xFFFF)
+}
+
+/// Short, header-free text for a WinHTTP failure code, shown in the tooltip. Name-not-found
+/// and could-not-connect are `Offline`; timeouts and TLS errors stay `Network`, since a slow
+/// or broken endpoint doesn't mean nothing else can get through (#106).
+fn winhttp_error(code: u32) -> FetchError {
     let text = match code {
         12002 => "timed out".to_string(),
         12007 => "host not found".to_string(),
@@ -325,7 +334,44 @@ fn net_error(err: &windows::core::Error) -> FetchError {
         12152 => "invalid server response".to_string(),
         _ => format!("network error {code}"),
     };
-    FetchError::Network(text)
+    if matches!(code, 12007 | 12029 | 12030) {
+        FetchError::Offline(text)
+    } else {
+        FetchError::Network(text)
+    }
+}
+
+/// CCT goes direct (or through an environment proxy) and ignores the Windows proxy setting,
+/// which the Codex CLI may follow. With one set, an unreachable host is not proof that there
+/// is no network, so it is reported as a plain `Network` error. `system_proxy` is only asked
+/// for an `Offline` error.
+fn unless_system_proxy<T>(
+    result: Result<T, FetchError>,
+    system_proxy: impl FnOnce() -> bool,
+) -> Result<T, FetchError> {
+    match result {
+        Err(FetchError::Offline(text)) if system_proxy() => Err(FetchError::Network(text)),
+        other => other,
+    }
+}
+
+/// Whether *Use a proxy server* is on in Windows' proxy settings (`ProxyEnable`).
+fn windows_proxy_enabled() -> bool {
+    let mut data = 0u32;
+    let mut size = size_of::<u32>() as u32;
+    // SAFETY: data/size describe a valid u32 buffer.
+    let status = unsafe {
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            &HSTRING::from(r"Software\Microsoft\Windows\CurrentVersion\Internet Settings"),
+            &HSTRING::from("ProxyEnable"),
+            RRF_RT_REG_DWORD,
+            None,
+            Some((&mut data as *mut u32).cast()),
+            Some(&mut size),
+        )
+    };
+    status.is_ok() && data != 0
 }
 
 fn set_u32(handle: &Handle, option: u32, value: u32) -> windows::core::Result<()> {
@@ -507,6 +553,62 @@ mod tests {
     use std::net::TcpListener;
     use std::thread;
     use std::time::Instant;
+
+    #[test]
+    fn winhttp_codes_map_to_offline_only_for_dns_and_connect_failures() {
+        let offline = |text: &str| FetchError::Offline(text.into());
+        let network = |text: &str| FetchError::Network(text.into());
+        for (code, want) in [
+            (12007, offline("host not found")),
+            (12029, offline("could not connect")),
+            (12030, offline("could not connect")),
+            // A slow or broken endpoint doesn't mean the Codex CLI can't reach its own (#106).
+            (12002, network("timed out")),
+            (12175, network("TLS or certificate error")),
+            (12152, network("invalid server response")),
+            (12031, network("network error 12031")),
+        ] {
+            assert_eq!(winhttp_error(code), want, "{code}");
+        }
+    }
+
+    #[test]
+    fn a_refused_connection_is_offline() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/u", listener.local_addr().unwrap());
+        drop(listener);
+        let err = fetch(
+            &url,
+            &[("Authorization", SECRET)],
+            &local(Duration::from_secs(5)),
+        )
+        .unwrap_err();
+        assert_eq!(err, FetchError::Offline("could not connect".into()));
+    }
+
+    #[test]
+    fn a_system_proxy_turns_offline_back_into_a_plain_network_error() {
+        let offline = || FetchError::Offline("could not connect".into());
+        // CCT ignores the Windows proxy, the Codex CLI may not: then it isn't proof of no network.
+        assert_eq!(
+            unless_system_proxy(Err(offline()), || true),
+            Err::<(), _>(FetchError::Network("could not connect".into()))
+        );
+        assert_eq!(
+            unless_system_proxy(Err::<(), _>(offline()), || false),
+            Err(offline())
+        );
+        let mut asked = false;
+        let other = Err::<(), _>(FetchError::Expired);
+        assert_eq!(
+            unless_system_proxy(other, || {
+                asked = true;
+                true
+            }),
+            Err(FetchError::Expired)
+        );
+        assert!(!asked, "the registry is only read for an offline error");
+    }
 
     const SECRET: &str = "acct-secret-123";
 

@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- **No pointless `codex` process while offline.** When the Codex usage endpoint can't be reached
+  at all (name not found, connection refused), CCT goes straight to the session logs instead of
+  starting `codex app-server`, which needs the same network. Timeouts and TLS errors still try
+  it, and so does any error while a Windows proxy is set, since the CLI may get through where CCT
+  can't. The tooltip reads the same (#106).
+
 ## [0.4.3] - 2026-11-11
 
 ### Added

@@ -44,6 +44,10 @@ pub enum FetchError {
     Expired,
     NoSubscription,
     Network(String),
+    /// The host could not be reached at all (name not found, connection refused) and no
+    /// Windows proxy is set, so another client on this PC can't get through either (#106).
+    /// Transient, and shown exactly like `Network`.
+    Offline(String),
     BadResponse(String),
 }
 

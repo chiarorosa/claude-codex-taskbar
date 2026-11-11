@@ -206,10 +206,12 @@ fn error_message(lang: Lang, kind: Kind, err: &FetchError) -> String {
         (Kind::Claude, FetchError::NoLogin) => Key::ClaudeNoLogin,
         (_, FetchError::NoLogin) => Key::CodexNoLogin,
         (_, FetchError::NoSubscription) => Key::NoSubscription,
-        (_, FetchError::Network(msg) | FetchError::BadResponse(msg)) if msg.is_empty() => {
+        (_, FetchError::Network(msg) | FetchError::Offline(msg) | FetchError::BadResponse(msg))
+            if msg.is_empty() =>
+        {
             Key::NoRecentData
         }
-        (_, FetchError::Network(msg) | FetchError::BadResponse(msg)) => {
+        (_, FetchError::Network(msg) | FetchError::Offline(msg) | FetchError::BadResponse(msg)) => {
             return format!("{} ({msg})", t(lang, Key::NoRecentData));
         }
     };
@@ -321,7 +323,11 @@ fn provider_block(
             usage_lines(out, usage);
             let at = format_local_hhmm(*at);
             let notice = match err {
-                FetchError::Network(msg) | FetchError::BadResponse(msg) if !msg.is_empty() => {
+                FetchError::Network(msg)
+                | FetchError::Offline(msg)
+                | FetchError::BadResponse(msg)
+                    if !msg.is_empty() =>
+                {
                     fmt2(t(lang, Key::StaleReasonFmt), msg, &at)
                 }
                 _ => fmt(t(lang, Key::StaleFmt), &at),
@@ -689,6 +695,24 @@ mod tests {
         assert!(stale_tip(Lang::PtBr, err()).contains(&format!(
             "Falha ao atualizar (HTTP 429); último dado às {at}"
         )));
+    }
+
+    #[test]
+    fn offline_errors_read_exactly_like_network_errors() {
+        let offline = FetchError::Offline("host not found".into());
+        let network = FetchError::Network("host not found".into());
+        for lang in [Lang::En, Lang::PtBr] {
+            assert_eq!(
+                stale_tip(lang, offline.clone()),
+                stale_tip(lang, network.clone())
+            );
+            for kind in [Kind::Claude, Kind::Codex] {
+                assert_eq!(
+                    error_message(lang, kind, &offline),
+                    error_message(lang, kind, &network)
+                );
+            }
+        }
     }
 
     #[test]
