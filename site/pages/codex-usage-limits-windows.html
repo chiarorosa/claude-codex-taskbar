@@ -34,13 +34,42 @@
     <li>In Settings, keep the <strong>Codex</strong> switch on. Turn Claude Code off if you only use Codex.</li>
     <li>Right-click the strip → <strong>Start with Windows</strong>.</li>
   </ol>
+  <img src="{{root}}img/screenshot-settings.png" width="450" height="862" loading="lazy" style="width:min(100%,360px)"
+       alt="CCT Settings window in dark mode: Claude Code and Codex switches, items on the strip as chips, and general options">
+
+  <h2>Reading the Codex gauge</h2>
+  <figure class="taskbar">
+    <img src="{{root}}img/screenshot.png" width="467" height="46" loading="lazy"
+         alt="The CCT strip on the Windows 11 taskbar: a Me label in Codex blue before the Codex 5h and weekly gauges, next to the Claude gauges">
+  </figure>
+  <ul>
+    <li><strong>Codex 5h</strong> is the % used of the current 5-hour window; <strong>wk</strong> is the % used of the weekly window. They are the same numbers <code>/status</code> shows.</li>
+    <li>Hover the strip to see when each window resets, in your local time.</li>
+    <li>Prefer to see what is left? Turn on <strong>Show remaining instead of used</strong> in Settings and the gauges count down instead.</li>
+    <li>The tag before the gauges (<code>Me</code> above) is your label for the Codex account, so you can tell a personal login from a work one at a glance.</li>
+  </ul>
+
+  <h2>When you hit the limit</h2>
+  <p>Once a window reaches 100%, Codex stops taking new requests on that account until the window resets; the weekly window can block you even when the 5-hour one still has room. Two habits help:</p>
+  <ul>
+    <li>Watch the <strong>weekly</strong> gauge, not just the 5-hour one: it resets far less often.</li>
+    <li>Turn on <strong>quota alerts</strong> in Settings. CCT sends a Windows notification when Codex usage crosses 80% and 95% (both configurable), and stays quiet while an app runs in full screen or you are presenting.</li>
+  </ul>
 
   <h2>How CCT reads Codex usage</h2>
   <ul>
-    <li><strong>Read-only login.</strong> CCT reads the login the Codex CLI saved in <code>~/.codex/auth.json</code> and never writes it or refreshes its token.</li>
+    <li><strong>Read-only login.</strong> CCT reads the login the Codex CLI saved in <code>auth.json</code> inside <code>%CODEX_HOME%</code>, or <code>%USERPROFILE%\.codex</code> when that variable is not set, and never writes it or refreshes its token.</li>
     <li><strong>Offline fallback.</strong> If the usage endpoint fails, CCT asks the installed <code>codex</code> CLI for its rate limits, and as a last resort uses the newest limit the CLI recorded in its own session logs, if that window has not reset yet.</li>
     <li><strong>Honest errors.</strong> When nothing works, the gauge shows <code>—</code> with the reason in the tooltip, never a fake <code>0%</code>.</li>
     <li><strong>Your label.</strong> A short tag such as <code>P</code> or <code>W</code> sits before the Codex gauge in Codex blue, so you know which account the numbers belong to.</li>
+  </ul>
+
+  <h2>When the gauge shows —</h2>
+  <p>CCT never shows <code>0%</code> for something it could not read. Hover the <code>—</code> to see why:</p>
+  <ul>
+    <li><strong>“Log in by running <code>codex login</code>”</strong>: there is no Codex login for this Windows user. Sign in with <code>codex login</code> in a terminal on the same user, and check that <code>CODEX_HOME</code> points where you expect if you set it.</li>
+    <li><strong>“Codex login expired — run <code>codex login</code>”</strong>: the saved login is too old. Use Codex once, or run <code>codex login</code>. The experimental <strong>Keep login active</strong> option in Settings can do this for you: when the login expires it runs <code>codex login status</code> in the background, which sends no prompt and uses no quota.</li>
+    <li><strong>A network error</strong>: the usage endpoint did not answer. CCT tries the installed <code>codex</code> CLI and its session logs first, and retries on the next refresh.</li>
   </ul>
 
   <h2>Questions</h2>

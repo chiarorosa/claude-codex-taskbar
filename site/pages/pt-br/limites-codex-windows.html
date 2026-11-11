@@ -34,13 +34,42 @@
     <li>Em Configurações, deixe o botão do <strong>Codex</strong> ligado. Desligue o Claude Code se você só usa o Codex.</li>
     <li>Clique direito na faixa → <strong>Iniciar com o Windows</strong>.</li>
   </ol>
+  <img src="{{root}}img/screenshot-settings.png" width="450" height="862" loading="lazy" style="width:min(100%,360px)"
+       alt="Janela de Configurações do CCT no modo escuro: botões do Claude Code e do Codex, itens da faixa como chips e opções gerais">
+
+  <h2>Como ler o medidor do Codex</h2>
+  <figure class="taskbar">
+    <img src="{{root}}img/screenshot.png" width="467" height="46" loading="lazy"
+         alt="A faixa do CCT na barra de tarefas do Windows 11: o rótulo Me em azul do Codex antes dos medidores de 5 horas e semanal do Codex, ao lado dos medidores do Claude">
+  </figure>
+  <ul>
+    <li><strong>Codex 5h</strong> é o % usado da janela de 5 horas atual; <strong>wk</strong> é o % usado da janela semanal. São os mesmos números que o <code>/status</code> mostra.</li>
+    <li>Passe o mouse sobre a faixa para ver quando cada janela zera, no seu horário local.</li>
+    <li>Prefere ver quanto sobra? Ligue <strong>Mostrar restante em vez de usado</strong> nas Configurações e os medidores passam a contar para baixo.</li>
+    <li>A marca antes dos medidores (<code>Me</code> na imagem) é o seu rótulo para a conta do Codex, para você distinguir o login pessoal do de trabalho num relance.</li>
+  </ul>
+
+  <h2>Quando você bate o limite</h2>
+  <p>Quando uma janela chega a 100%, o Codex para de aceitar novos pedidos naquela conta até a janela zerar; a janela semanal pode travar você mesmo com folga na de 5 horas. Dois hábitos ajudam:</p>
+  <ul>
+    <li>Fique de olho no medidor <strong>semanal</strong>, não só no de 5 horas: ele zera bem menos vezes.</li>
+    <li>Ligue os <strong>alertas de cota</strong> nas Configurações. O CCT manda uma notificação do Windows quando o uso do Codex passa de 80% e de 95% (os dois ajustáveis), e fica em silêncio enquanto um app está em tela cheia ou você está apresentando.</li>
+  </ul>
 
   <h2>Como o CCT lê o uso do Codex</h2>
   <ul>
-    <li><strong>Login só para leitura.</strong> O CCT lê o login que o Codex CLI salvou em <code>~/.codex/auth.json</code> e nunca grava nesse arquivo nem renova o token.</li>
+    <li><strong>Login só para leitura.</strong> O CCT lê o login que o Codex CLI salvou em <code>auth.json</code> dentro de <code>%CODEX_HOME%</code>, ou de <code>%USERPROFILE%\.codex</code> quando essa variável não existe, e nunca grava nesse arquivo nem renova o token.</li>
     <li><strong>Plano B sem o serviço.</strong> Se o endpoint de uso falhar, o CCT pergunta os limites ao <code>codex</code> CLI instalado e, em último caso, usa o limite mais recente que o CLI registrou nos próprios logs de sessão, se aquela janela ainda não zerou.</li>
     <li><strong>Erros honestos.</strong> Quando nada funciona, o medidor mostra <code>—</code> com o motivo na dica de ferramenta, nunca um <code>0%</code> falso.</li>
     <li><strong>Seu rótulo.</strong> Uma marca curta como <code>P</code> ou <code>W</code> fica antes do medidor do Codex, no azul do Codex, para você saber de qual conta são os números.</li>
+  </ul>
+
+  <h2>Quando o medidor mostra —</h2>
+  <p>O CCT nunca mostra <code>0%</code> para algo que não conseguiu ler. Passe o mouse sobre o <code>—</code> para ver o motivo:</p>
+  <ul>
+    <li><strong>“Faça login rodando <code>codex login</code>”</strong>: não há login do Codex neste usuário do Windows. Entre com <code>codex login</code> num terminal do mesmo usuário e, se você definiu <code>CODEX_HOME</code>, confira se ela aponta para onde você espera.</li>
+    <li><strong>“Login do Codex expirado — rode <code>codex login</code>”</strong>: o login salvo ficou velho. Use o Codex uma vez ou rode <code>codex login</code>. A opção experimental <strong>Manter login ativo</strong>, nas Configurações, pode fazer isso por você: quando o login expira, ela roda <code>codex login status</code> em segundo plano, o que não envia nenhuma mensagem nem gasta cota.</li>
+    <li><strong>Um erro de rede</strong>: o endpoint de uso não respondeu. O CCT tenta antes o <code>codex</code> CLI instalado e os logs de sessão dele, e tenta de novo na próxima atualização.</li>
   </ul>
 
   <h2>Perguntas</h2>
