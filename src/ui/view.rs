@@ -841,6 +841,35 @@ mod tests {
     }
 
     #[test]
+    fn tooltip_explains_claude_cli_login_missing() {
+        for (lang, expected) in [
+            (
+                Lang::En,
+                "Claude Code CLI login not found — desktop app logins aren't supported; run `claude` once to fix it",
+            ),
+            (
+                Lang::PtBr,
+                "Login do Claude Code CLI não encontrado — logins do app desktop não são suportados; rode `claude` uma vez para resolver",
+            ),
+            (
+                Lang::Es,
+                "No se encontró el inicio de sesión de la CLI de Claude Code — los inicios de sesión de la app de escritorio no son compatibles; ejecuta `claude` una vez para solucionarlo",
+            ),
+        ] {
+            let tip = tooltip_text(
+                lang,
+                &ProviderStatus::Failed(FetchError::NoLogin),
+                &ProviderStatus::Disabled,
+                &[],
+                TaskbarHints::default(),
+                0,
+                false,
+            );
+            assert!(tip.contains(expected));
+        }
+    }
+
+    #[test]
     fn tooltip_skips_disabled_and_lists_hidden_items_and_hints() {
         let hidden = vec![ItemView {
             id: ItemId::Gpu,

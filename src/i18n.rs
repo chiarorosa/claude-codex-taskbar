@@ -277,9 +277,9 @@ fn strings(key: Key) -> [&'static str; Lang::ALL.len()] {
             "Sesión de Claude caducada — abre Claude Code para renovarla",
         ],
         Key::ClaudeNoLogin => [
-            "Log in by running `claude`",
-            "Faça login rodando `claude`",
-            "Inicia sesión ejecutando `claude`",
+            "Claude Code CLI login not found — desktop app logins aren't supported; run `claude` once to fix it",
+            "Login do Claude Code CLI não encontrado — logins do app desktop não são suportados; rode `claude` uma vez para resolver",
+            "No se encontró el inicio de sesión de la CLI de Claude Code — los inicios de sesión de la app de escritorio no son compatibles; ejecuta `claude` una vez para solucionarlo",
         ],
         Key::CodexExpired => [
             "Codex login expired — run `codex login`",
