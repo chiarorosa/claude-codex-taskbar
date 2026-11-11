@@ -104,7 +104,7 @@ pub fn escape(text: &str) -> String {
 mod tests {
     use super::*;
 
-    const LANGS: [Lang; 2] = [Lang::En, Lang::PtBr];
+    const LANGS: [Lang; 3] = Lang::ALL;
 
     /// The access key of a menu text: the character after a single `&`.
     fn access_key(text: &str) -> Option<char> {
@@ -214,7 +214,9 @@ mod tests {
         for key in MENU_KEYS {
             let en = access_key(&text(Lang::En, key));
             assert!(en.is_some(), "{key:?}");
-            assert_eq!(access_key(&text(Lang::PtBr, key)), en, "{key:?}");
+            for lang in LANGS {
+                assert_eq!(access_key(&text(lang, key)), en, "{key:?} {lang:?}");
+            }
         }
     }
 
@@ -231,6 +233,8 @@ mod tests {
         assert_eq!(text(Lang::En, Key::MenuExit), "E&xit	X");
         assert_eq!(text(Lang::PtBr, Key::MenuRefresh), "Atualiza&r agora	R");
         assert_eq!(text(Lang::PtBr, Key::MenuSettings), "Configuraçõe&s…	S");
+        assert_eq!(text(Lang::Es, Key::MenuRefresh), "Actualiza&r ahora	R");
+        assert_eq!(text(Lang::Es, Key::MenuExit), "Salir	&X");
     }
 
     #[test]

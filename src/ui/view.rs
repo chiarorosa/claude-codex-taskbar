@@ -708,7 +708,7 @@ mod tests {
     fn offline_errors_read_exactly_like_network_errors() {
         let offline = FetchError::Offline("host not found".into());
         let network = FetchError::Network("host not found".into());
-        for lang in [Lang::En, Lang::PtBr] {
+        for lang in Lang::ALL {
             assert_eq!(
                 stale_tip(lang, offline.clone()),
                 stale_tip(lang, network.clone())

@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **Spanish.** CCT now speaks Spanish when the Windows display language is any Spanish variant
+  (Spain, Mexico, Argentina, US, ...). Each string now holds one entry per language, so adding
+  another language no longer means touching every lookup (#35).
+
 ### Fixed
 - **HTTP 429 is waited out instead of retried.** When Claude or Codex rate-limits CCT, that
   provider is skipped until the server's `Retry-After` (at most an hour), or, without one, for

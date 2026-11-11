@@ -79,7 +79,7 @@ Each entry shows the plan and the usage last seen on that account. `⚠ login ex
 - **Honest numbers**: an expired login or a broken endpoint shows `—` and the reason, never a fake `0%`.
 - **Stays out of your way**: hides in full screen, follows display scaling, light/dark theme and auto-hide, never covers your taskbar icons, survives Explorer restarts and sleep.
 - **New Settings window**: styled like the Windows Settings app, follows light/dark mode automatically, and applies every change instantly.
-- **English and Brazilian Portuguese**, following the Windows display language.
+- **English, Brazilian Portuguese and Spanish**, following the Windows display language.
 
 <img src="docs/screenshot-settings.png" width="360" alt="CCT Settings window in dark mode: Claude Code and Codex switches, items on the strip as chips, and general options">
 

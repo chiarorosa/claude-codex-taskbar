@@ -475,7 +475,7 @@ mod tests {
             SaveError::ConfigDirOverride,
             SaveError::Io("e".into()),
         ];
-        for lang in [Lang::En, Lang::PtBr] {
+        for lang in Lang::ALL {
             for e in &switch_errors {
                 let text = switch_error_text(lang, e);
                 assert!(!text.is_empty() && !text.contains("{}"), "{e:?}");

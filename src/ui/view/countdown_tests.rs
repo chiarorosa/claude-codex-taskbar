@@ -71,6 +71,7 @@ fn retained_tip_expected(lang: Lang, notice: Key) -> String {
     let (label, five_countdown, week_countdown) = match lang {
         Lang::En => ("wk", "in 1h 12m", "in 7d"),
         Lang::PtBr => ("sem", "em 1h 12min", "em 7d"),
+        Lang::Es => ("sem", "en 1h 12min", "en 7d"),
     };
     let notice = if notice == Key::StaleReasonFmt {
         fmt2(t(lang, notice), "offline", &at)
@@ -96,6 +97,12 @@ fn countdown_rounds_up_minutes_in_both_languages() {
             Some(format!("em {pt}")),
             "{seconds} seconds"
         );
+        // Spanish writes the units like Portuguese.
+        assert_eq!(
+            reset_countdown(Lang::Es, NOW + seconds, NOW),
+            Some(format!("en {pt}")),
+            "{seconds} seconds"
+        );
     }
 }
 
@@ -116,6 +123,7 @@ fn tooltip_keeps_absolute_times_and_adds_both_provider_countdowns() {
     for (lang, week, five, weekly) in [
         (Lang::En, "wk", "in 1h 12m", "in 7d"),
         (Lang::PtBr, "sem", "em 1h 12min", "em 7d"),
+        (Lang::Es, "sem", "en 1h 12min", "en 7d"),
     ] {
         let tip = countdown_tip(lang, &status, NOW);
         let absolute5 = fmt(t(lang, Key::ResetsFmt), &format_local_hhmm(NOW + 4320));
@@ -258,9 +266,12 @@ fn tooltip_never_invents_countdown_without_usage() {
             at: NOW,
         },
     ] {
-        for lang in [Lang::En, Lang::PtBr] {
+        for lang in Lang::ALL {
             let tip = countdown_tip(lang, &status, NOW);
-            assert!(!tip.contains("(in ") && !tip.contains("(em "), "{tip}");
+            assert!(
+                !tip.contains("(in ") && !tip.contains("(em ") && !tip.contains("(en "),
+                "{tip}"
+            );
             assert!(!tip.contains('%'), "{tip}");
         }
     }
