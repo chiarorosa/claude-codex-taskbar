@@ -113,6 +113,12 @@ class Sitemap(unittest.TestCase):
         self.assertNotIn("priority", xml)
         self.assertNotIn("changefreq", xml)
 
+    def test_lastmod_comes_before_extensions(self):
+        # sitemaps.org XSD: loc, lastmod, then elements from other namespaces.
+        xml = build.sitemap_xml([{"path": "", "modified": "2026-11-10", "alternates": {"en": "", "pt-BR": "pt-br/"}}])
+        self.assertLess(xml.index("<loc>"), xml.index("<lastmod>"))
+        self.assertLess(xml.index("<lastmod>"), xml.index("<xhtml:link"))
+
 
 class _Checker(HTMLParser):
     VOID = {"meta", "link", "img", "br", "hr", "input", "source", "wbr"}

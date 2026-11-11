@@ -271,12 +271,12 @@ def sitemap_xml(pages: list[dict]) -> str:
     for p in pages:
         rows.append("  <url>")
         rows.append(f"    <loc>{html.escape(page_url(p['path']))}</loc>")
+        rows.append(f"    <lastmod>{p['modified']}</lastmod>")
         for lang, path in sorted(p.get("alternates", {}).items()):
             rows.append(f'    <xhtml:link rel="alternate" hreflang="{lang}" href="{html.escape(page_url(path))}"/>')
         if p.get("alternates"):
             rows.append(f'    <xhtml:link rel="alternate" hreflang="x-default" '
                         f'href="{html.escape(page_url(p["alternates"]["en"]))}"/>')
-        rows.append(f"    <lastmod>{p['modified']}</lastmod>")
         rows.append("  </url>")
     rows.append("</urlset>")
     return "\n".join(rows) + "\n"
