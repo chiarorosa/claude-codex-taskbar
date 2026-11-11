@@ -65,6 +65,13 @@ pub enum Row {
         title: String,
         sub: String,
     },
+    /// A push button on the right, drawn like a chip (#117).
+    Button {
+        id: usize,
+        title: String,
+        sub: Option<(String, Ink)>,
+        label: String,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -178,6 +185,23 @@ impl Out<'_> {
                 let sub = Some((sub.as_str(), Ink::Sub));
                 let row_h = self.text_row(title, sub, left, control_x - GAP, top, FIELD_H);
                 let rect = self.px(control_x, top + (row_h - FIELD_H) / 2.0, FIELD_W, FIELD_H);
+                self.page.controls.push((*id, rect));
+                row_h
+            }
+            Row::Button {
+                id,
+                title,
+                sub,
+                label,
+            } => {
+                let h = self.m.height(label, TextRole::Body, f32::MAX) + 2.0 * CHIP_PAD_Y;
+                // Never wider than half the row, so the title and its result keep room.
+                let w = (self.m.width(label, TextRole::Body).ceil() + 2.0 + 2.0 * CHIP_PAD_X)
+                    .min((right - left) / 2.0);
+                let control_x = right - w;
+                let sub = sub.as_ref().map(|(t, ink)| (t.as_str(), *ink));
+                let row_h = self.text_row(title, sub, left, control_x - GAP, top, h);
+                let rect = self.px(control_x, top + (row_h - h) / 2.0, w, h);
                 self.page.controls.push((*id, rect));
                 row_h
             }
@@ -414,6 +438,26 @@ mod tests {
         let (_, sw) = p.controls[0];
         assert_eq!((sw.w, sw.h), (40, 20));
         assert_eq!(sw.x + sw.w, p.cards[0].x + p.cards[0].w - 14);
+    }
+
+    #[test]
+    fn a_button_row_sits_right_and_fits_its_label() {
+        let row = Row::Button {
+            id: 7,
+            title: "Version 0.4.3".into(),
+            sub: Some(("You have the latest version".into(), Ink::Success)),
+            label: "Check for updates".into(),
+        };
+        let p = layout("T", &[Block::Card(vec![row])], 1.0, &Fake);
+        let card = p.cards[0];
+        let (id, b) = p.controls[0];
+        assert_eq!(id, 7);
+        assert_eq!(b.x + b.w, card.x + card.w - 14);
+        assert!(b.w as f32 > Fake.width("Check for updates", TextRole::Body));
+        assert!(b.y >= card.y && b.y + b.h <= card.y + card.h);
+        let title = p.texts.iter().find(|t| t.text == "Version 0.4.3").unwrap();
+        let sub = p.texts.iter().find(|t| t.ink == Ink::Success).unwrap();
+        assert!(title.rect.x + title.rect.w <= b.x && sub.rect.y > title.rect.y);
     }
 
     #[test]

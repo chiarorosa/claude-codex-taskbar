@@ -55,7 +55,8 @@ and run `claude-codex-taskbar.exe`.
   login on their own (no auto-switch, no rotation, no live switch tests, even behind a flag):
   automated switching could go against Anthropic's usage policies. Unit tests use temp homes and
   fake credentials.
-- Network access only to the providers' own usage endpoints. No telemetry.
+- Network access only to the providers' own usage endpoints, plus GitHub's releases API when the
+  user clicks *Check for updates* (#117; never automatic). No telemetry.
 - Never show `0%` for an error; error states render `—`.
 - All user-facing text goes through `i18n::t` with a string for every language (English, pt-BR,
   Spanish).

@@ -105,8 +105,8 @@ Build from source: `cargo build --release` (see [CONTRIBUTING.md](CONTRIBUTING.m
 
 ## Privacy
 
-- **Zero telemetry.** No analytics, no crash reports, no update checks, nothing sent to the maintainers. Ever.
-- **Network access only to the providers' own usage endpoints**, and only for the providers you enable.
+- **Zero telemetry.** No analytics, no crash reports, no automatic update checks, nothing sent to the maintainers. Ever.
+- **Network access only to the providers' own usage endpoints**, and only for the providers you enable. The one exception is **Settings → Check for updates**: only when you click it, CCT asks GitHub's public releases API (`api.github.com`) for the latest version, with no token and nothing about you.
 - **Credentials stay on your PC.** Read-only, except the Claude login, which is written only when you pick an account to switch to (*Save current account* only reads it). Tokens are never logged, copied or sent anywhere except to their own provider.
 - Settings and saved accounts live locally in `%APPDATA%\claude-codex-taskbar\`.
 - Full [privacy policy](https://chiarorosa.github.io/claude-codex-taskbar/privacy/): what CCT reads, sends and stores.

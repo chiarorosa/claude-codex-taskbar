@@ -10,3 +10,4 @@ pub mod model;
 pub mod packaged;
 pub mod timeutil;
 pub mod ui;
+pub mod update;

@@ -571,6 +571,7 @@ mod tests {
             WM_APP_OPEN_SETTINGS,
             notifications::CALLBACK,
             super::super::switcher_ui::WM_APP_SWITCHED,
+            super::super::settings::WM_APP_UPDATE_CHECKED,
         ];
         let unique: std::collections::BTreeSet<_> = ids.iter().collect();
         assert_eq!(unique.len(), ids.len(), "{ids:?}");

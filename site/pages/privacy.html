@@ -12,7 +12,7 @@
 
     <h2>What CCT does not do</h2>
     <ul>
-      <li><strong>No telemetry.</strong> No analytics, no crash reports, no update checks, no advertising IDs. Nothing is sent to the maintainers. Ever.</li>
+      <li><strong>No telemetry.</strong> No analytics, no crash reports, no automatic update checks, no advertising IDs. Nothing is sent to the maintainers. Ever.</li>
       <li>No account, no sign-up, no server of its own.</li>
     </ul>
 
@@ -26,6 +26,7 @@
     <ul>
       <li>Your Claude Code token goes only to Anthropic, at <code>https://api.anthropic.com/api/oauth/usage</code>. Your Codex token goes only to OpenAI, at <code>https://chatgpt.com/backend-api/wham/usage</code>. Each is sent only when you enable that provider, and only to read your usage limits.</li>
       <li>When the Codex endpoint fails, CCT may ask the Codex CLI itself (<code>codex app-server</code>), which contacts OpenAI on its own. The opt-in <em>Keep login active</em> runs each CLI's own status command (<code>claude auth status</code>, <code>codex login status</code>). No prompt is sent and no quota is used.</li>
+      <li><strong>Check for updates</strong> (Settings): only when you click it, CCT sends one request to GitHub's public releases API, <code>https://api.github.com/repos/chiarorosa/claude-codex-taskbar/releases/latest</code>, with no token and nothing about you, and compares the answer with its own version. GitHub sees the request like any visit, under its own privacy policy.</li>
       <li>Those requests follow each provider's own privacy policy. CCT adds nothing to them beyond its name and version in the <code>User-Agent</code>.</li>
     </ul>
 

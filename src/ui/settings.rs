@@ -21,11 +21,13 @@ use crate::i18n::{Key, Lang, fmt, t};
 use crate::limits::Provider;
 use crate::limits::switcher::store::Store;
 use crate::model::ItemId;
+use crate::update::{self, Outcome};
 use layout::{Block, Ink, Page, Px, Row};
 use model::{Toggle, Tone, apply_labels, apply_numbers, apply_toggle, status_line};
 use paint::Painter;
 use palette::{Palette, palette, read_theme};
 use std::cell::RefCell;
+use std::sync::mpsc::{Receiver, channel};
 use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows::Win32::Graphics::Dwm::{DWMWA_USE_IMMERSIVE_DARK_MODE, DwmSetWindowAttribute};
 use windows::Win32::Graphics::Gdi::{
@@ -43,19 +45,21 @@ use windows::Win32::UI::HiDpi::{
     AdjustWindowRectExForDpi, GetDpiForWindow, GetSystemMetricsForDpi,
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::GetFocus;
+use windows::Win32::UI::Shell::ShellExecuteW;
 use windows::Win32::UI::WindowsAndMessaging::{
     BM_GETCHECK, BM_SETCHECK, BN_CLICKED, BN_KILLFOCUS, BN_SETFOCUS, BS_AUTOCHECKBOX, BS_NOTIFY,
     CreateWindowExW, DefWindowProcW, DestroyWindow, EN_KILLFOCUS, EN_SETFOCUS, ES_NUMBER,
     GetClientRect, GetScrollInfo, GetSystemMetrics, GetWindowTextW, HMENU, IDC_ARROW,
-    IsDialogMessageW, LoadCursorW, MSG, MoveWindow, RegisterClassExW, SB_BOTTOM, SB_LINEDOWN,
-    SB_LINEUP, SB_PAGEDOWN, SB_PAGEUP, SB_THUMBPOSITION, SB_THUMBTRACK, SB_TOP, SB_VERT,
-    SCROLLINFO, SIF_PAGE, SIF_POS, SIF_RANGE, SIF_TRACKPOS, SM_CXSCREEN, SM_CXVSCROLL, SM_CYSCREEN,
-    SW_SHOW, SWP_NOACTIVATE, SWP_NOZORDER, SendMessageW, SetForegroundWindow, SetWindowPos,
-    SetWindowTextW, ShowWindow, UISF_HIDEFOCUS, WINDOW_EX_STYLE, WINDOW_STYLE, WM_CLOSE,
-    WM_COMMAND, WM_CTLCOLOREDIT, WM_DESTROY, WM_DPICHANGED, WM_ERASEBKGND, WM_MOUSEWHEEL,
-    WM_NOTIFY, WM_PAINT, WM_QUERYUISTATE, WM_SETFONT, WM_SETTINGCHANGE, WM_SIZE, WM_SYSCOLORCHANGE,
-    WM_UPDATEUISTATE, WM_VSCROLL, WNDCLASSEXW, WS_CAPTION, WS_CHILD, WS_CLIPCHILDREN,
-    WS_EX_CONTROLPARENT, WS_OVERLAPPED, WS_SYSMENU, WS_TABSTOP, WS_VISIBLE, WS_VSCROLL,
+    IsDialogMessageW, LoadCursorW, MSG, MoveWindow, PostMessageW, RegisterClassExW, SB_BOTTOM,
+    SB_LINEDOWN, SB_LINEUP, SB_PAGEDOWN, SB_PAGEUP, SB_THUMBPOSITION, SB_THUMBTRACK, SB_TOP,
+    SB_VERT, SCROLLINFO, SIF_PAGE, SIF_POS, SIF_RANGE, SIF_TRACKPOS, SM_CXSCREEN, SM_CXVSCROLL,
+    SM_CYSCREEN, SW_SHOW, SW_SHOWNORMAL, SWP_NOACTIVATE, SWP_NOZORDER, SendMessageW,
+    SetForegroundWindow, SetWindowPos, SetWindowTextW, ShowWindow, UISF_HIDEFOCUS, WINDOW_EX_STYLE,
+    WINDOW_STYLE, WM_APP, WM_CLOSE, WM_COMMAND, WM_CTLCOLOREDIT, WM_DESTROY, WM_DPICHANGED,
+    WM_ERASEBKGND, WM_MOUSEWHEEL, WM_NOTIFY, WM_PAINT, WM_QUERYUISTATE, WM_SETFONT,
+    WM_SETTINGCHANGE, WM_SIZE, WM_SYSCOLORCHANGE, WM_UPDATEUISTATE, WM_VSCROLL, WNDCLASSEXW,
+    WS_CAPTION, WS_CHILD, WS_CLIPCHILDREN, WS_EX_CONTROLPARENT, WS_OVERLAPPED, WS_SYSMENU,
+    WS_TABSTOP, WS_VISIBLE, WS_VSCROLL,
 };
 use windows::core::{BOOL, PCWSTR, w};
 
@@ -66,6 +70,10 @@ const ID_HW: usize = 10;
 const ID_LIMITS: usize = 11;
 const ID_CLAUDE_LABEL: usize = 12;
 const ID_CODEX_LABEL: usize = 13;
+const ID_UPDATE: usize = 14;
+/// Sent to the settings window when *Check for updates* has an answer; carries no data, the
+/// answer waits in `State::update_rx` (#117).
+pub const WM_APP_UPDATE_CHECKED: u32 = WM_APP + 6;
 /// Switches and chips get ids from here, in `State::checks` order.
 const ID_CHECK: usize = 100;
 
@@ -101,6 +109,15 @@ struct Facts {
     claude_slot: Option<u32>,
     /// The Claude label as last saved, to write the index only when it changes.
     claude_label: String,
+    /// *Check for updates*: not asked yet, asking, or the answer (#117).
+    update: UpdateView,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+enum UpdateView {
+    Idle,
+    Checking,
+    Done(Outcome),
 }
 
 struct State {
@@ -110,6 +127,8 @@ struct State {
     checks: Vec<Check>,
     /// Text fields as (id, control): the two intervals, then the two labels.
     edits: [(usize, HWND); 4],
+    update_button: HWND,
+    update_rx: Option<Receiver<Outcome>>,
     dpi: u32,
     light: bool,
     pal: Palette,
@@ -390,8 +409,112 @@ fn blocks(facts: &Facts, checks: &[(Toggle, String, bool)]) -> Vec<Block> {
             title: t(lang, Key::SettingsLimitsInterval).to_string(),
             sub: t(lang, Key::LimitsIntervalRange).to_string(),
         },
+        update_row(lang, &facts.update),
     ]));
     out
+}
+
+/// The version row: the running version, the last answer, and the button (#117).
+fn update_row(lang: Lang, view: &UpdateView) -> Row {
+    let line = |key: Key, ink: Ink| Some((t(lang, key).to_string(), ink));
+    let (sub, label) = match view {
+        UpdateView::Idle => (None, Key::UpdateCheck),
+        UpdateView::Checking => (line(Key::UpdateChecking, Ink::Sub), Key::UpdateCheck),
+        UpdateView::Done(Outcome::UpToDate) => {
+            (line(Key::UpdateUpToDate, Ink::Success), Key::UpdateCheck)
+        }
+        UpdateView::Done(Outcome::Available(version)) => (
+            Some((fmt(t(lang, Key::UpdateAvailableFmt), version), Ink::Text)),
+            Key::UpdateOpen,
+        ),
+        UpdateView::Done(Outcome::Failed(reason)) => (
+            Some((fmt(t(lang, Key::UpdateFailedFmt), reason), Ink::Warning)),
+            Key::UpdateCheck,
+        ),
+    };
+    Row::Button {
+        id: ID_UPDATE,
+        title: fmt(t(lang, Key::VersionFmt), update::CURRENT),
+        sub,
+        label: t(lang, label).to_string(),
+    }
+}
+
+fn update_label(s: &State) -> String {
+    match update_row(s.facts.lang, &s.facts.update) {
+        Row::Button { label, .. } => label,
+        _ => String::new(),
+    }
+}
+
+/// Shows the version row's new state and gives the button its new name.
+fn refresh_update_row() {
+    relayout();
+    if let Some((button, label)) = with_state(|s| (s.update_button, wide_z(&update_label(s)))) {
+        // SAFETY: our own button; `label` outlives the call.
+        unsafe {
+            let _ = SetWindowTextW(button, PCWSTR(label.as_ptr()));
+        }
+    }
+}
+
+/// The button: opens the release page once a newer version is known, otherwise asks GitHub
+/// on a short-lived thread. Nothing is ever asked without this click (#117).
+fn update_clicked() {
+    let Some((view, hwnd)) = with_state(|s| (s.facts.update.clone(), s.hwnd)) else {
+        return;
+    };
+    match view {
+        UpdateView::Checking => {}
+        UpdateView::Done(Outcome::Available(_)) => {
+            let url = wide_z(update::RELEASE_PAGE);
+            // SAFETY: a fixed https URL handed to the shell; both strings outlive the call.
+            unsafe {
+                ShellExecuteW(
+                    Some(hwnd),
+                    w!("open"),
+                    PCWSTR(url.as_ptr()),
+                    PCWSTR::null(),
+                    PCWSTR::null(),
+                    SW_SHOWNORMAL,
+                );
+            }
+        }
+        UpdateView::Idle | UpdateView::Done(_) => {
+            let (tx, rx) = channel();
+            with_state_mut(|s| {
+                s.facts.update = UpdateView::Checking;
+                s.update_rx = Some(rx);
+            });
+            let target = hwnd.0 as isize;
+            std::thread::spawn(move || {
+                if tx.send(update::check()).is_ok() {
+                    // SAFETY: a data-free notification; if the window is gone it is dropped.
+                    unsafe {
+                        let _ = PostMessageW(
+                            Some(HWND(target as _)),
+                            WM_APP_UPDATE_CHECKED,
+                            WPARAM(0),
+                            LPARAM(0),
+                        );
+                    }
+                }
+            });
+            refresh_update_row();
+        }
+    }
+}
+
+fn update_checked() {
+    let done = with_state_mut(|s| {
+        let outcome = s.update_rx.as_ref()?.try_recv().ok()?;
+        s.update_rx = None;
+        s.facts.update = UpdateView::Done(outcome);
+        Some(())
+    });
+    if done.flatten().is_some() {
+        refresh_update_row();
+    }
 }
 
 fn edit_font(dpi: u32) -> HFONT {
@@ -487,6 +610,9 @@ fn place_children() {
             .enumerate()
             .filter_map(|(i, c)| rect_of(ID_CHECK + i).map(|r| (c.hwnd, r)))
             .collect();
+        if let Some(r) = rect_of(ID_UPDATE) {
+            moves.push((s.update_button, r));
+        }
         let inset = (8.0 * scale).round() as i32;
         let line = (18.0 * scale).round() as i32;
         for (id, edit) in s.edits {
@@ -646,6 +772,7 @@ fn redraw_children() {
             .iter()
             .map(|c| c.hwnd)
             .chain(s.edits.map(|(_, e)| e))
+            .chain(std::iter::once(s.update_button))
             .collect()
     })
     .unwrap_or_default();
@@ -809,6 +936,7 @@ pub fn open(parent: HWND) {
         ),
         claude_slot: super::switcher_ui::live_slot(),
         claude_label: super::switcher_ui::live_claude_label(&cfg.claude_label),
+        update: UpdateView::Idle,
     };
     let monitor = monitor.map(|m| Px {
         x: m.left,
@@ -948,6 +1076,23 @@ fn create(parent: HWND, cfg: &Config, disks: &[DiskReading], facts: Facts, monit
             ),
         ];
 
+        let label = wide_z(t(facts.lang, Key::UpdateCheck));
+        let update_button = CreateWindowExW(
+            Default::default(),
+            w!("BUTTON"),
+            PCWSTR(label.as_ptr()),
+            WS_CHILD | WS_VISIBLE | WS_TABSTOP | WINDOW_STYLE(BS_NOTIFY as u32),
+            0,
+            0,
+            1,
+            1,
+            Some(hwnd),
+            Some(HMENU(ID_UPDATE as _)),
+            None,
+            None,
+        )
+        .unwrap_or_default();
+
         STATE.with(|s| {
             *s.borrow_mut() = Some(State {
                 hwnd,
@@ -955,6 +1100,8 @@ fn create(parent: HWND, cfg: &Config, disks: &[DiskReading], facts: Facts, monit
                 facts,
                 checks,
                 edits,
+                update_button,
+                update_rx: None,
                 dpi,
                 light: theme.light,
                 pal,
@@ -979,13 +1126,17 @@ fn custom_draw(cd: &NMCUSTOMDRAW) -> Option<LRESULT> {
         return None;
     }
     with_state(|s| {
-        let check = s.checks.iter().find(|c| c.hwnd == cd.hdr.hwndFrom)?;
         let r = Px {
             x: cd.rc.left,
             y: cd.rc.top,
             w: cd.rc.right - cd.rc.left,
             h: cd.rc.bottom - cd.rc.top,
         };
+        if cd.hdr.hwndFrom == s.update_button {
+            let _ = s.painter.chip(cd.hdc, r, &update_label(s), false, &s.pal);
+            return Some(LRESULT(CDRF_SKIPDEFAULT as isize));
+        }
+        let check = s.checks.iter().find(|c| c.hwnd == cd.hdr.hwndFrom)?;
         let on = is_checked(check.hwnd);
         let _ = match check.look {
             Look::Switch => s.painter.switch(cd.hdc, r, on, &s.pal),
@@ -1009,10 +1160,14 @@ fn focus_ring(s: &State, page: &Page) -> Option<Px> {
     if ui.0 as u32 & UISF_HIDEFOCUS != 0 {
         return None;
     }
-    let i = s.checks.iter().position(|c| c.hwnd == focus)?;
+    let id = if focus == s.update_button {
+        ID_UPDATE
+    } else {
+        ID_CHECK + s.checks.iter().position(|c| c.hwnd == focus)?
+    };
     page.controls
         .iter()
-        .find(|(id, _)| *id == ID_CHECK + i)
+        .find(|(i, _)| *i == id)
         .map(|(_, r)| *r)
 }
 
@@ -1108,6 +1263,12 @@ extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM)
                     reveal_control(id);
                     invalidate(hwnd);
                 }
+                (ID_UPDATE, BN_CLICKED) => update_clicked(),
+                (ID_UPDATE, BN_SETFOCUS) => {
+                    reveal_control(ID_UPDATE);
+                    invalidate(hwnd);
+                }
+                (ID_UPDATE, BN_KILLFOCUS) => invalidate(hwnd),
                 (i, BN_CLICKED) if i >= ID_CHECK => {
                     apply_check(i - ID_CHECK);
                     relayout();
@@ -1181,6 +1342,10 @@ extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM)
             scroll_by(-delta * line_px() / 120);
             LRESULT(0)
         }
+        WM_APP_UPDATE_CHECKED => {
+            update_checked();
+            LRESULT(0)
+        }
         WM_ERASEBKGND => LRESULT(1),
         WM_PAINT => {
             paint(hwnd);
@@ -1217,5 +1382,83 @@ extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM)
         }
         // SAFETY: default handling for everything else.
         _ => unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn row(lang: Lang, view: UpdateView) -> (String, Option<(String, Ink)>, String) {
+        match update_row(lang, &view) {
+            Row::Button {
+                id,
+                title,
+                sub,
+                label,
+            } => {
+                assert_eq!(id, ID_UPDATE);
+                (title, sub, label)
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn version_row_shows_each_answer_and_the_matching_button() {
+        let version = format!("Version {}", update::CURRENT);
+        assert_eq!(
+            row(Lang::En, UpdateView::Idle),
+            (version.clone(), None, "Check for updates".into())
+        );
+        assert_eq!(
+            row(Lang::En, UpdateView::Checking).1,
+            Some(("Checking…".into(), Ink::Sub))
+        );
+        assert_eq!(
+            row(Lang::En, UpdateView::Done(Outcome::UpToDate)).1,
+            Some(("You have the latest version".into(), Ink::Success))
+        );
+        let (_, sub, label) = row(
+            Lang::En,
+            UpdateView::Done(Outcome::Available("0.9.0".into())),
+        );
+        assert_eq!(sub, Some(("Version 0.9.0 is available".into(), Ink::Text)));
+        assert_eq!(label, "Open the release page");
+        let (_, sub, label) = row(
+            Lang::PtBr,
+            UpdateView::Done(Outcome::Failed("host not found".into())),
+        );
+        assert_eq!(
+            sub,
+            Some((
+                "Não foi possível verificar atualizações (host not found)".into(),
+                Ink::Warning
+            ))
+        );
+        assert_eq!(label, "Verificar atualizações");
+        assert_eq!(row(Lang::Es, UpdateView::Idle).2, "Buscar actualizaciones");
+    }
+
+    #[test]
+    fn the_general_card_ends_with_the_version_row() {
+        let facts = Facts {
+            lang: Lang::En,
+            hints: Vec::new(),
+            claude_login: true,
+            codex_login: true,
+            notify_sub: String::new(),
+            claude_slot: None,
+            claude_label: "P".into(),
+            update: UpdateView::Idle,
+        };
+        let model = blocks(&facts, &[]);
+        let Some(Block::Card(rows)) = model.last() else {
+            panic!("{model:?}");
+        };
+        assert!(matches!(
+            rows.last(),
+            Some(Row::Button { id: ID_UPDATE, .. })
+        ));
     }
 }

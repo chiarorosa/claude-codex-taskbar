@@ -41,7 +41,7 @@ cargo test</code></pre>
         <li>Pure logic in testable functions; write the failing test first.</li>
         <li>Credentials are read-only, except the Claude switcher on an explicit click.</li>
         <li>Account switches are manual only. No automatic switching, ever, not even in tests.</li>
-        <li>No telemetry. Network access only to the providers' usage endpoints.</li>
+        <li>No telemetry. Network access only to the providers' usage endpoints, plus GitHub's releases API when the user clicks <em>Check for updates</em>.</li>
         <li>Errors show <code>—</code>, never a fake <code>0%</code>.</li>
         <li>Keep the binary small; discuss new crates in an issue first.</li>
         <li>Conventional Commits, small focused pull requests.</li>

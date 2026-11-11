@@ -7,6 +7,11 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Check for updates, on click only.** Settings → General shows the running version with a
+  *Check for updates* button. Only when you press it, CCT asks GitHub's releases API once and
+  says whether you have the latest version or which one is available, with a button to open
+  the release page. Nothing is checked automatically, and errors say so instead of claiming
+  you're up to date (#117).
 - **MSIX package for the Microsoft Store (in preparation).** CI now builds, signs with a test
   certificate, installs and launches the package. Inside it, *Start with Windows* uses the
   package's startup task instead of the Run key. The Release workflow keeps an unsigned package
