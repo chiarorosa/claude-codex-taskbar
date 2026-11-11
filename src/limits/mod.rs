@@ -6,6 +6,7 @@ pub mod codex;
 pub mod http;
 pub mod keepalive;
 pub mod notify;
+pub mod ratelimit;
 pub mod reset;
 pub mod state;
 pub mod switcher;
@@ -48,6 +49,9 @@ pub enum FetchError {
     /// Windows proxy is set, so another client on this PC can't get through either (#106).
     /// Transient, and shown exactly like `Network`.
     Offline(String),
+    /// HTTP 429. Holds when to try again: from `Retry-After`, or set by the worker's wait
+    /// (`ratelimit`) before the result reaches the UI. Never any header text (#87).
+    RateLimited(Option<i64>),
     BadResponse(String),
 }
 

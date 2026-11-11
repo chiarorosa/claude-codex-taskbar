@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- **HTTP 429 is waited out instead of retried.** When Claude or Codex rate-limits CCT, that
+  provider is skipped until the server's `Retry-After` (at most an hour), or, without one, for
+  one interval, then 2x, 4x, up to 30 min. *Refresh now* waits too, and the tooltip says when
+  the next try is ("rate limited, next try 14:32"). Recent numbers stay on screen as before.
+  A success or a Claude account switch starts over, and a Codex 429 no longer starts
+  `codex app-server` (#87).
+
 ### Changed
 - **No pointless `codex` process while offline.** When the Codex usage endpoint can't be reached
   at all (name not found, connection refused), CCT goes straight to the session logs instead of

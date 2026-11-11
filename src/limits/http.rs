@@ -16,9 +16,10 @@ use windows::Win32::Networking::WinHttp::{
     WINHTTP_OPTION_PROXY_PASSWORD, WINHTTP_OPTION_PROXY_USERNAME,
     WINHTTP_OPTION_RECEIVE_RESPONSE_TIMEOUT, WINHTTP_OPTION_REDIRECT_POLICY,
     WINHTTP_OPTION_REDIRECT_POLICY_NEVER, WINHTTP_OPTION_SECURE_PROTOCOLS,
-    WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_QUERY_STATUS_CODE, WinHttpCloseHandle, WinHttpConnect,
-    WinHttpOpen, WinHttpOpenRequest, WinHttpQueryHeaders, WinHttpReadData, WinHttpReceiveResponse,
-    WinHttpSendRequest, WinHttpSetOption, WinHttpSetTimeouts,
+    WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_QUERY_RETRY_AFTER, WINHTTP_QUERY_STATUS_CODE,
+    WinHttpCloseHandle, WinHttpConnect, WinHttpOpen, WinHttpOpenRequest, WinHttpQueryHeaders,
+    WinHttpReadData, WinHttpReceiveResponse, WinHttpSendRequest, WinHttpSetOption,
+    WinHttpSetTimeouts,
 };
 use windows::Win32::System::Registry::{HKEY_CURRENT_USER, RRF_RT_REG_DWORD, RegGetValueW};
 use windows::core::{HSTRING, PCWSTR};
@@ -28,11 +29,13 @@ const TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_BODY: usize = 1 << 20;
 const USER_AGENT: &str = concat!("claude-codex-taskbar/", env!("CARGO_PKG_VERSION"));
 
-/// 2xx is success, 401/403 mean expired credentials, anything else (3xx included) is an error.
+/// 2xx is success, 401/403 mean expired credentials, 429 is a rate limit (its `Retry-After`
+/// is added by the caller), anything else (3xx included) is an error.
 fn map_status(status: u16) -> Result<(), FetchError> {
     match status {
         200..=299 => Ok(()),
         401 | 403 => Err(FetchError::Expired),
+        429 => Err(FetchError::RateLimited(None)),
         _ => Err(FetchError::BadResponse(format!("HTTP {status}"))),
     }
 }
@@ -374,6 +377,36 @@ fn windows_proxy_enabled() -> bool {
     status.is_ok() && data != 0
 }
 
+/// The raw `Retry-After` value, if the response has one. It only ever becomes a number.
+fn retry_after(request: &Handle) -> Option<String> {
+    let mut buf = [0u16; 64];
+    let mut len = size_of_val(&buf) as u32;
+    // SAFETY: WinHTTP writes at most `len` bytes into `buf` and sets `len` to the bytes used.
+    unsafe {
+        WinHttpQueryHeaders(
+            request.0,
+            WINHTTP_QUERY_RETRY_AFTER,
+            PCWSTR::null(),
+            Some(buf.as_mut_ptr().cast()),
+            &mut len,
+            std::ptr::null_mut(),
+        )
+    }
+    .ok()?;
+    let chars = (len as usize / 2).min(buf.len());
+    String::from_utf16(&buf[..chars]).ok()
+}
+
+/// `Retry-After` as delay seconds or an HTTP date, turned into the unix time to retry at.
+fn parse_retry_after(value: &str, now: i64) -> Option<i64> {
+    let value = value.trim();
+    if !value.is_empty() && value.bytes().all(|c| c.is_ascii_digit()) {
+        let secs: i64 = value.parse().unwrap_or(i64::MAX);
+        return Some(now.saturating_add(secs));
+    }
+    crate::timeutil::parse_http_date(value)
+}
+
 fn set_u32(handle: &Handle, option: u32, value: u32) -> windows::core::Result<()> {
     // SAFETY: `handle` is live and a DWORD option takes a 4-byte buffer.
     unsafe { WinHttpSetOption(Some(handle.0), option, Some(&value.to_ne_bytes())) }
@@ -527,7 +560,14 @@ fn fetch(
         )
     }
     .map_err(net)?;
-    map_status(u16::try_from(status).unwrap_or(0))?;
+    match map_status(u16::try_from(status).unwrap_or(0)) {
+        Err(FetchError::RateLimited(_)) => {
+            let retry_at = retry_after(&request)
+                .and_then(|value| parse_retry_after(&value, crate::timeutil::now_unix()));
+            return Err(FetchError::RateLimited(retry_at));
+        }
+        other => other?,
+    }
 
     let mut body = Vec::new();
     let mut buf = vec![0u8; 16 * 1024];
@@ -637,12 +677,65 @@ mod tests {
 
     #[test]
     fn other_statuses_are_bad_response() {
-        for status in [100, 400, 404, 429, 500, 503] {
+        for status in [100, 400, 404, 500, 503] {
             assert_eq!(
                 map_status(status),
                 Err(FetchError::BadResponse(format!("HTTP {status}")))
             );
         }
+    }
+
+    #[test]
+    fn too_many_requests_is_a_rate_limit() {
+        assert_eq!(map_status(429), Err(FetchError::RateLimited(None)));
+    }
+
+    #[test]
+    fn retry_after_takes_seconds_or_an_http_date() {
+        let now = 1_794_425_000;
+        assert_eq!(parse_retry_after("120", now), Some(now + 120));
+        assert_eq!(parse_retry_after(" 0 ", now), Some(now));
+        assert_eq!(
+            parse_retry_after("Wed, 11 Nov 2026 19:30:00 GMT", now),
+            Some(1_794_425_400)
+        );
+        assert_eq!(
+            parse_retry_after("99999999999999999999999", now),
+            Some(i64::MAX)
+        );
+        for bad in ["", "-5", "1.5", "soon", "120s"] {
+            assert_eq!(parse_retry_after(bad, now), None, "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn a_429_reply_carries_only_its_retry_time() {
+        let started = crate::timeutil::now_unix();
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/u", listener.local_addr().unwrap());
+        let server = serve_once(
+            listener,
+            "HTTP/1.1 429 Too Many Requests
+Retry-After: 90
+Content-Length: 0
+Connection: close
+
+"
+            .into(),
+        );
+        let err = fetch(&url, &[("Authorization", SECRET)], &local(TIMEOUT)).unwrap_err();
+        server.join().unwrap();
+        let FetchError::RateLimited(Some(at)) = err else {
+            panic!("{err:?}");
+        };
+        assert!((started + 90..=started + 92).contains(&at), "{at}");
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/u", listener.local_addr().unwrap());
+        let server = serve_once(listener, reply("429 Too Many Requests", ""));
+        let err = fetch(&url, &[], &local(TIMEOUT)).unwrap_err();
+        server.join().unwrap();
+        assert_eq!(err, FetchError::RateLimited(None), "no header, no time");
     }
 
     fn target(secure: bool, host: &str, port: u16, path: &str) -> Target {

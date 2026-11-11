@@ -1,9 +1,10 @@
 //! Background threads, one per provider, that fetch limits and hand results to the UI thread.
 
+use super::ratelimit::RateLimit;
 use super::{FetchError, ProviderUsage};
 use crate::model::Kind;
 use crate::timeutil::now_unix;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, channel};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread::JoinHandle;
@@ -24,6 +25,10 @@ pub struct Control {
     claude_on: AtomicBool,
     codex_on: AtomicBool,
     quit: AtomicBool,
+    /// Bumped by `account_changed`, so that provider's thread drops a rate-limit wait that
+    /// belonged to the previous login (#87).
+    claude_login: AtomicU64,
+    codex_login: AtomicU64,
     /// Bumped by every `wake`. Each provider thread remembers the last value it acted on,
     /// so one wake reaches every thread: a shared `bool` reset by the first thread to wake
     /// could be cleared before the other thread saw it (#89).
@@ -38,6 +43,8 @@ impl Control {
             claude_on: AtomicBool::new(false),
             codex_on: AtomicBool::new(false),
             quit: AtomicBool::new(false),
+            claude_login: AtomicU64::new(0),
+            codex_login: AtomicU64::new(0),
             wake_gen: Mutex::new(0),
             cv: Condvar::new(),
         })
@@ -75,6 +82,31 @@ impl Control {
     pub fn stop(&self) {
         self.quit.store(true, Ordering::Relaxed);
         self.wake();
+    }
+
+    /// A different login is live for `kind` (a Claude account switch): fetch it now, even
+    /// while the previous login is waiting out a rate limit.
+    pub fn account_changed(&self, kind: Kind) {
+        if let Some(login) = self.login(kind) {
+            login.fetch_add(1, Ordering::Relaxed);
+        }
+        self.wake();
+    }
+
+    fn login(&self, kind: Kind) -> Option<&AtomicU64> {
+        match kind {
+            Kind::Claude => Some(&self.claude_login),
+            Kind::Codex => Some(&self.codex_login),
+            Kind::Hardware => None,
+        }
+    }
+
+    fn login_gen(&self, kind: Kind) -> u64 {
+        self.login(kind).map_or(0, |l| l.load(Ordering::Relaxed))
+    }
+
+    fn interval(&self) -> u32 {
+        self.interval_secs.load(Ordering::Relaxed)
     }
 
     fn quitting(&self) -> bool {
@@ -140,12 +172,20 @@ pub fn spawn_with(
             let post = post.clone();
             std::thread::spawn(move || {
                 let mut seen = start_gen;
+                let mut limit = RateLimit::default();
+                let mut login = control.login_gen(kind);
                 while !control.quitting() {
-                    if control.is_enabled(kind) {
-                        post(LimitResult {
-                            kind,
-                            result: fetch(now_unix()),
-                        });
+                    if control.login_gen(kind) != login {
+                        login = control.login_gen(kind);
+                        limit = RateLimit::default();
+                    }
+                    let now = now_unix();
+                    // While rate-limited, skip the provider entirely: the error already on
+                    // screen says when the next try is (#87).
+                    if control.is_enabled(kind) && limit.allows(now) {
+                        let mut result = fetch(now);
+                        limit.record(&mut result, now, control.interval().into());
+                        post(LimitResult { kind, result });
                     }
                     control.wait(&mut seen);
                 }
@@ -352,6 +392,69 @@ mod tests {
     #[test]
     fn blocked_claude_does_not_delay_codex() {
         blocked_provider_does_not_delay(Kind::Claude, Kind::Codex);
+    }
+
+    #[test]
+    fn a_rate_limited_provider_waits_even_on_wake_until_its_login_changes() {
+        let control = Control::new(3600);
+        control.set_enabled(Kind::Claude, true);
+        control.set_enabled(Kind::Codex, true);
+        let claude_calls = Arc::new(AtomicUsize::new(0));
+        let calls = claude_calls.clone();
+        let limited: Fetcher = Box::new(move |_| {
+            calls.fetch_add(1, Ordering::SeqCst);
+            Err(FetchError::RateLimited(None))
+        });
+        let (tx, rx) = mpsc::channel();
+        let started = now_unix();
+        let handle = spawn_with(
+            control.clone(),
+            vec![(Kind::Claude, limited), (Kind::Codex, fake(1.0))],
+            move |r| {
+                let _ = tx.send(r);
+            },
+        );
+        let mut first = Vec::new();
+        for _ in 0..2 {
+            first.push(
+                rx.recv_timeout(Duration::from_secs(2))
+                    .expect("first fetch"),
+            );
+        }
+        let claude = first.iter().find(|r| r.kind == Kind::Claude).unwrap();
+        // No Retry-After: one interval, and the posted error says until when.
+        let Err(FetchError::RateLimited(Some(until))) = claude.result else {
+            panic!("{:?}", claude.result);
+        };
+        assert!(
+            (started + 3600..=started + 3602).contains(&until),
+            "{until}"
+        );
+
+        // Refresh now still refreshes Codex, but leaves the rate-limited Claude alone.
+        control.wake();
+        let r = rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("codex refresh");
+        assert_eq!(r.kind, Kind::Codex);
+        assert!(rx.recv_timeout(Duration::from_millis(200)).is_err());
+        assert_eq!(claude_calls.load(Ordering::SeqCst), 1);
+
+        // A Claude account switch is a different login: fetched right away. Codex keeps its
+        // own schedule apart from the wake.
+        control.account_changed(Kind::Claude);
+        let mut kinds = Vec::new();
+        for _ in 0..2 {
+            kinds.push(
+                rx.recv_timeout(Duration::from_secs(2))
+                    .expect("after switch")
+                    .kind,
+            );
+        }
+        assert!(kinds.contains(&Kind::Claude) && kinds.contains(&Kind::Codex));
+        assert_eq!(claude_calls.load(Ordering::SeqCst), 2);
+        control.stop();
+        handle.join().unwrap();
     }
 
     #[test]

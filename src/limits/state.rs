@@ -17,7 +17,10 @@ pub fn next_status(
     };
     let transient = matches!(
         err,
-        FetchError::Network(_) | FetchError::Offline(_) | FetchError::BadResponse(_)
+        FetchError::Network(_)
+            | FetchError::Offline(_)
+            | FetchError::RateLimited(_)
+            | FetchError::BadResponse(_)
     );
     if transient
         && let ProviderStatus::Ok { usage, at } | ProviderStatus::Stale { usage, at, .. } = prev
@@ -157,6 +160,24 @@ mod tests {
         };
         let err = FetchError::Offline("host not found".into());
         let s = next_status(&prev, Err(err.clone()), 1000 + 899);
+        assert_eq!(
+            s,
+            ProviderStatus::Stale {
+                usage: usage(10.0),
+                at: 1000,
+                err
+            }
+        );
+    }
+
+    #[test]
+    fn rate_limit_keeps_recent_data_on_screen() {
+        let prev = ProviderStatus::Ok {
+            usage: usage(10.0),
+            at: 1000,
+        };
+        let err = FetchError::RateLimited(Some(1500));
+        let s = next_status(&prev, Err(err.clone()), 1100);
         assert_eq!(
             s,
             ProviderStatus::Stale {

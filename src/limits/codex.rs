@@ -1159,6 +1159,21 @@ mod tests {
     }
 
     #[test]
+    fn rate_limit_never_starts_the_app_server_or_reads_session_logs() {
+        let dir = sessions_dir("rate-limited", SESSION);
+        let provider = CodexProvider::new(dir.parent().unwrap().to_path_buf());
+        let err = provider
+            .fetch_with_tiers(
+                SESSION_NOW,
+                |_| Err(FetchError::RateLimited(Some(SESSION_NOW + 60))),
+                || panic!("app-server must not run on a 429"),
+            )
+            .unwrap_err();
+        // The worker has to see the 429 to wait it out, so no session data hides it (#87).
+        assert_eq!(err, FetchError::RateLimited(Some(SESSION_NOW + 60)));
+    }
+
+    #[test]
     fn offline_without_session_logs_returns_the_offline_error() {
         let home =
             std::env::temp_dir().join(format!("wuw-codex-{}-offline-empty", std::process::id()));

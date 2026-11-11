@@ -312,7 +312,7 @@ extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM)
                 // Show the new account's limits and label right away (#48, #74).
                 with_app(|app| {
                     app.refresh_claude_label();
-                    app.control.wake();
+                    app.control.account_changed(crate::model::Kind::Claude);
                 });
                 render(hwnd);
             }

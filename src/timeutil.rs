@@ -52,6 +52,29 @@ pub fn parse_rfc3339(s: &str) -> Option<i64> {
     Some(days_from_civil(year, month, day) * 86400 + hour * 3600 + min * 60 + sec - offset)
 }
 
+/// Parses an HTTP date in the IMF-fixdate form every server must send
+/// (`Sun, 06 Nov 1994 08:49:37 GMT`) into unix seconds.
+pub fn parse_http_date(s: &str) -> Option<i64> {
+    let b = s.as_bytes();
+    if b.len() != 29 || &s[3..5] != ", " || &s[25..] != " GMT" {
+        return None;
+    }
+    if b[7] != b' ' || b[11] != b' ' || b[16] != b' ' || b[19] != b':' || b[22] != b':' {
+        return None;
+    }
+    const MONTHS: [&str; 12] = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ];
+    let month = MONTHS.iter().position(|m| *m == &s[8..11])? as i64 + 1;
+    let num = |r| num_in(s, r);
+    let (day, year) = (num(5..7)?, num(12..16)?);
+    let (hour, min, sec) = (num(17..19)?, num(20..22)?, num(23..25)?);
+    if !(1..=31).contains(&day) || hour > 23 || min > 59 || sec > 60 {
+        return None;
+    }
+    Some(days_from_civil(year, month, day) * 86400 + hour * 3600 + min * 60 + sec)
+}
+
 fn num_in(s: &str, r: std::ops::Range<usize>) -> Option<i64> {
     let part = s.get(r)?;
     if part.bytes().all(|c| c.is_ascii_digit()) {
@@ -124,6 +147,30 @@ pub fn format_local_day_hhmm(unix: i64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn http_dates_in_imf_fixdate_form() {
+        assert_eq!(
+            parse_http_date("Sun, 06 Nov 1994 08:49:37 GMT"),
+            Some(784111777)
+        );
+        assert_eq!(
+            parse_http_date("Wed, 11 Nov 2026 19:30:00 GMT"),
+            Some(1794425400)
+        );
+        for bad in [
+            "",
+            "Sunday, 06-Nov-94 08:49:37 GMT",
+            "Sun Nov  6 08:49:37 1994",
+            "Sun, 06 Nov 1994 08:49:37 UTC",
+            "Sun, 06 Foo 1994 08:49:37 GMT",
+            "Sun, 32 Nov 1994 08:49:37 GMT",
+            "Sun, 06 Nov 1994 24:49:37 GMT",
+            "Sun, 06 Nov 1994 08:49:37 GMT ",
+        ] {
+            assert_eq!(parse_http_date(bad), None, "{bad:?}");
+        }
+    }
 
     #[test]
     fn rfc3339_utc() {

@@ -206,16 +206,29 @@ fn error_message(lang: Lang, kind: Kind, err: &FetchError) -> String {
         (Kind::Claude, FetchError::NoLogin) => Key::ClaudeNoLogin,
         (_, FetchError::NoLogin) => Key::CodexNoLogin,
         (_, FetchError::NoSubscription) => Key::NoSubscription,
-        (_, FetchError::Network(msg) | FetchError::Offline(msg) | FetchError::BadResponse(msg))
-            if msg.is_empty() =>
-        {
-            Key::NoRecentData
-        }
-        (_, FetchError::Network(msg) | FetchError::Offline(msg) | FetchError::BadResponse(msg)) => {
-            return format!("{} ({msg})", t(lang, Key::NoRecentData));
-        }
+        (_, _) => match error_reason(lang, err) {
+            Some(reason) => return format!("{} ({reason})", t(lang, Key::NoRecentData)),
+            None => Key::NoRecentData,
+        },
     };
     t(lang, key).into()
+}
+
+/// Why a transient fetch failed, for the tooltip; `None` when there is nothing to add.
+fn error_reason(lang: Lang, err: &FetchError) -> Option<String> {
+    match err {
+        FetchError::Network(msg) | FetchError::Offline(msg) | FetchError::BadResponse(msg)
+            if !msg.is_empty() =>
+        {
+            Some(msg.clone())
+        }
+        FetchError::RateLimited(Some(at)) => Some(fmt(
+            t(lang, Key::RateLimitedNextFmt),
+            &format_local_hhmm(*at),
+        )),
+        FetchError::RateLimited(None) => Some(t(lang, Key::RateLimited).into()),
+        _ => None,
+    }
 }
 
 // Round up so a reset less than a minute away never looks already due (#14).
@@ -322,15 +335,9 @@ fn provider_block(
         ProviderStatus::Stale { usage, at, err } => {
             usage_lines(out, usage);
             let at = format_local_hhmm(*at);
-            let notice = match err {
-                FetchError::Network(msg)
-                | FetchError::Offline(msg)
-                | FetchError::BadResponse(msg)
-                    if !msg.is_empty() =>
-                {
-                    fmt2(t(lang, Key::StaleReasonFmt), msg, &at)
-                }
-                _ => fmt(t(lang, Key::StaleFmt), &at),
+            let notice = match error_reason(lang, err) {
+                Some(reason) => fmt2(t(lang, Key::StaleReasonFmt), &reason, &at),
+                None => fmt(t(lang, Key::StaleFmt), &at),
             };
             let _ = write!(out, "\n  {notice}");
         }
@@ -713,6 +720,27 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn rate_limit_shows_when_the_next_try_is() {
+        let next = format_local_hhmm(1900);
+        let at = format_local_hhmm(1000);
+        let limited = || FetchError::RateLimited(Some(1900));
+        assert!(stale_tip(Lang::En, limited()).contains(&format!(
+            "Update failed (rate limited, next try {next}); last data at {at}"
+        )));
+        assert!(stale_tip(Lang::PtBr, limited()).contains(&format!(
+            "Falha ao atualizar (limite de requisições, próxima tentativa às {next}); último dado às {at}"
+        )));
+        assert_eq!(
+            error_message(Lang::En, Kind::Claude, &limited()),
+            format!("No recent data (rate limited, next try {next})")
+        );
+        assert_eq!(
+            error_message(Lang::PtBr, Kind::Codex, &FetchError::RateLimited(None)),
+            "Sem dado recente (limite de requisições)"
+        );
     }
 
     #[test]
