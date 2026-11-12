@@ -53,12 +53,13 @@ use windows::Win32::UI::Shell::ShellExecuteW;
 use windows::Win32::UI::WindowsAndMessaging::{
     BM_GETCHECK, BM_SETCHECK, BN_CLICKED, BN_KILLFOCUS, BN_SETFOCUS, BS_AUTOCHECKBOX,
     BS_AUTORADIOBUTTON, BS_NOTIFY, CreateWindowExW, DefWindowProcW, DestroyWindow, EN_KILLFOCUS,
-    EN_SETFOCUS, ES_NUMBER, GetClientRect, GetScrollInfo, GetSystemMetrics, GetWindowTextW, HMENU,
-    IDC_ARROW, IsDialogMessageW, LoadCursorW, MSG, MoveWindow, PostMessageW, RegisterClassExW,
-    SB_BOTTOM, SB_LINEDOWN, SB_LINEUP, SB_PAGEDOWN, SB_PAGEUP, SB_THUMBPOSITION, SB_THUMBTRACK,
-    SB_TOP, SB_VERT, SCROLLINFO, SIF_PAGE, SIF_POS, SIF_RANGE, SIF_TRACKPOS, SM_CXSCREEN,
-    SM_CXVSCROLL, SM_CYSCREEN, SW_SHOW, SW_SHOWNORMAL, SWP_NOACTIVATE, SWP_NOZORDER, SendMessageW,
-    SetForegroundWindow, SetWindowPos, SetWindowTextW, ShowWindow, UISF_HIDEFOCUS, WINDOW_EX_STYLE,
+    EN_SETFOCUS, ES_NUMBER, GWL_STYLE, GetClientRect, GetScrollInfo, GetSystemMetrics,
+    GetWindowLongPtrW, GetWindowTextW, HMENU, IDC_ARROW, IsDialogMessageW, LoadCursorW, MSG,
+    MoveWindow, PostMessageW, RegisterClassExW, SB_BOTTOM, SB_LINEDOWN, SB_LINEUP, SB_PAGEDOWN,
+    SB_PAGEUP, SB_THUMBPOSITION, SB_THUMBTRACK, SB_TOP, SB_VERT, SCROLLINFO, SIF_PAGE, SIF_POS,
+    SIF_RANGE, SIF_TRACKPOS, SM_CXSCREEN, SM_CXVSCROLL, SM_CYSCREEN, SW_SHOW, SW_SHOWNORMAL,
+    SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SendMessageW, SetForegroundWindow,
+    SetWindowLongPtrW, SetWindowPos, SetWindowTextW, ShowWindow, UISF_HIDEFOCUS, WINDOW_EX_STYLE,
     WINDOW_STYLE, WM_APP, WM_CLOSE, WM_COMMAND, WM_CTLCOLOREDIT, WM_DESTROY, WM_DPICHANGED,
     WM_ERASEBKGND, WM_MOUSEWHEEL, WM_NOTIFY, WM_PAINT, WM_QUERYUISTATE, WM_SETFONT,
     WM_SETTINGCHANGE, WM_SIZE, WM_SYSCOLORCHANGE, WM_UPDATEUISTATE, WM_VSCROLL, WNDCLASSEXW,
@@ -885,10 +886,47 @@ fn placement_clicked(side: Side) {
         return;
     };
     commit(parent, |base| with_placement(base, side));
+    // Tab lands on the selection: move the tab stop to the radio just checked.
+    let checked = match side {
+        Side::Left => ID_PLACE_LEFT,
+        Side::Right => ID_PLACE_RIGHT,
+    };
+    for (id, hwnd) in
+        with_state(|s| s.radios.iter().map(|r| (r.id, r.hwnd)).collect()).unwrap_or_else(Vec::new)
+    {
+        set_tabstop(hwnd, id == checked);
+    }
     if let Some(hints) = with_app(|app| setup_hints(app.taskbar_hints())) {
         with_state_mut(|s| s.facts.hints = hints);
     }
     relayout();
+}
+
+/// A placement radio's style: the first one starts the group, and only the checked one is a
+/// tab stop, so Tab lands on the selection and never changes it.
+fn radio_style(first: bool, checked: bool) -> WINDOW_STYLE {
+    let group = if first { WS_GROUP } else { WINDOW_STYLE(0) };
+    let style =
+        WS_CHILD | WS_VISIBLE | group | WINDOW_STYLE((BS_AUTORADIOBUTTON | BS_NOTIFY) as u32);
+    with_tabstop(style, checked)
+}
+
+/// `style` with `WS_TABSTOP` set or cleared, the rest untouched.
+fn with_tabstop(style: WINDOW_STYLE, on: bool) -> WINDOW_STYLE {
+    if on {
+        style | WS_TABSTOP
+    } else {
+        WINDOW_STYLE(style.0 & !WS_TABSTOP.0)
+    }
+}
+
+/// Sets or clears one control's `WS_TABSTOP`.
+fn set_tabstop(hwnd: HWND, on: bool) {
+    // SAFETY: reads and writes the style of our own child control.
+    unsafe {
+        let style = WINDOW_STYLE(GetWindowLongPtrW(hwnd, GWL_STYLE) as u32);
+        SetWindowLongPtrW(hwnd, GWL_STYLE, with_tabstop(style, on).0 as isize);
+    }
 }
 
 /// Applies the interval and label fields and shows the values the config actually took.
@@ -1051,14 +1089,22 @@ fn create(parent: HWND, cfg: &Config, disks: &[DiskReading], facts: Facts, monit
         };
         let font = edit_font(dpi);
 
-        let mut checks = Vec::new();
+        let mut checks: Vec<Check> = Vec::new();
         for (i, (toggle, label, look, on)) in
             check_specs(cfg, disks, facts.lang).into_iter().enumerate()
         {
             let text = wide_z(&label);
+            // The placement radios go right after "Start with Windows" in the tab order:
+            // the switch that follows them starts a new group, which ends theirs.
+            let group = if checks.last().is_some_and(|c| c.toggle == Toggle::Autostart) {
+                WS_GROUP
+            } else {
+                WINDOW_STYLE(0)
+            };
             let style = WS_CHILD
                 | WS_VISIBLE
                 | WS_TABSTOP
+                | group
                 | WINDOW_STYLE((BS_AUTOCHECKBOX | BS_NOTIFY) as u32);
             let child = CreateWindowExW(
                 Default::default(),
@@ -1085,8 +1131,8 @@ fn create(parent: HWND, cfg: &Config, disks: &[DiskReading], facts: Facts, monit
             });
         }
         // One group of auto radio buttons: Windows unchecks the other side, the arrow keys move
-        // between them, and UI Automation sees a radio group. Each field starts a new group,
-        // which ends this one.
+        // between them, and UI Automation sees a radio group. Left starts the group; only the
+        // checked radio is a tab stop, so Tab never changes the setting.
         let mut radios = Vec::new();
         for (id, side, key) in [
             (ID_PLACE_LEFT, Side::Left, Key::PlacementLeft),
@@ -1094,15 +1140,7 @@ fn create(parent: HWND, cfg: &Config, disks: &[DiskReading], facts: Facts, monit
         ] {
             let label = t(facts.lang, key).to_string();
             let text = wide_z(&label);
-            let first = if id == ID_PLACE_LEFT {
-                WS_GROUP | WS_TABSTOP
-            } else {
-                WINDOW_STYLE(0)
-            };
-            let style = WS_CHILD
-                | WS_VISIBLE
-                | first
-                | WINDOW_STYLE((BS_AUTORADIOBUTTON | BS_NOTIFY) as u32);
+            let style = radio_style(id == ID_PLACE_LEFT, side == facts.side);
             let child = CreateWindowExW(
                 Default::default(),
                 w!("BUTTON"),
@@ -1129,6 +1167,22 @@ fn create(parent: HWND, cfg: &Config, disks: &[DiskReading], facts: Facts, monit
                 label,
                 hwnd: child,
             });
+        }
+        // Tab order follows the rows: the radios sit right after "Start with Windows".
+        if let Some(autostart) = checks.iter().find(|c| c.toggle == Toggle::Autostart) {
+            let mut after = autostart.hwnd;
+            for radio in &radios {
+                let _ = SetWindowPos(
+                    radio.hwnd,
+                    Some(after),
+                    0,
+                    0,
+                    0,
+                    0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+                );
+                after = radio.hwnd;
+            }
         }
         let edit = |id: usize, text: &str, number: bool| {
             let text = wide_z(text);
@@ -1586,6 +1640,23 @@ mod tests {
             (opts[0].1.as_str(), opts[1].1.as_str()),
             ("Izquierda", "Derecha")
         );
+    }
+
+    #[test]
+    fn only_the_checked_radio_is_a_tab_stop_and_left_starts_the_group() {
+        // (first in the group, checked) -> (WS_GROUP, WS_TABSTOP)
+        for (first, checked, group, tab) in [
+            (true, true, true, true),
+            (true, false, true, false),
+            (false, true, false, true),
+            (false, false, false, false),
+        ] {
+            let style = radio_style(first, checked);
+            assert_eq!(style.contains(WS_GROUP), group, "{first} {checked}");
+            assert_eq!(style.contains(WS_TABSTOP), tab, "{first} {checked}");
+            assert_eq!(with_tabstop(style, !checked).contains(WS_TABSTOP), !checked);
+            assert_eq!(with_tabstop(style, !checked).contains(WS_GROUP), group);
+        }
     }
 
     #[test]
