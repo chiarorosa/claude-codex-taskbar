@@ -168,7 +168,9 @@ impl AppButtons {
         }
     }
 
-    /// Rectangles of the app buttons (Windows 10) or of the app groups (Windows 11).
+    /// Rectangles of the app buttons (Windows 10: children of `MSTaskListWClass`) or of the
+    /// children of `TaskbarFrame` (Windows 11: the `TaskbarFrameRepeater` group holding Start,
+    /// Task view and the app buttons, plus any button beside it such as Widgets).
     fn rects(&mut self, taskbar: HWND, windows_10: bool) -> Option<Vec<Rect>> {
         let same_taskbar = self.taskbar == taskbar.0 as isize;
         if !needs_full_find(self.container.is_some(), same_taskbar, self.warm_reads)

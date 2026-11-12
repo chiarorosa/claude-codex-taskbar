@@ -121,13 +121,14 @@ pub struct IconCache {
 pub const ICON_PERIOD_TICKS: u32 = 5;
 const ICON_MAX_BACKOFF_TICKS: u32 = 30;
 
-impl IconCache {
-    fn period(&self) -> u32 {
-        (ICON_PERIOD_TICKS << self.failures.min(4)).min(ICON_MAX_BACKOFF_TICKS)
-    }
+/// Ticks between lookups after `failures` failed ones in a row: 5, 10, 20, then 30.
+fn backoff(failures: u32) -> u32 {
+    (ICON_PERIOD_TICKS << failures.min(4)).min(ICON_MAX_BACKOFF_TICKS)
+}
 
+impl IconCache {
     pub fn needs_lookup(&self) -> bool {
-        !self.tried || (self.dirty && self.failures == 0) || self.ticks >= self.period()
+        !self.tried || (self.dirty && self.failures == 0) || self.ticks >= backoff(self.failures)
     }
 
     pub fn on_lookup(&mut self, result: Option<i32>) {
@@ -159,31 +160,47 @@ impl IconCache {
 /// Caches the right edge of the app buttons for the right placement (#10). Even warm, the
 /// UI Automation read costs about 2.7 ms, so a successful read is reused for
 /// [`ICON_PERIOD_TICKS`] ticks or until invalidated (apps open and close). A failed read is
-/// never kept as a guess: the value is dropped and the next render reads again.
+/// never kept as a guess: the value is dropped (the strip stays hidden) and reads back off
+/// like the icons' ([`IconCache`]), ignoring the cheap dirty mark until one succeeds.
 #[derive(Debug, Default)]
 pub struct AppsEdgeCache {
     last: Option<i32>,
     ticks: u32,
+    failures: u32,
     dirty: bool,
+    tried: bool,
 }
 
 impl AppsEdgeCache {
     pub fn needs_lookup(&self) -> bool {
-        self.last.is_none() || self.dirty || self.ticks >= ICON_PERIOD_TICKS
+        !self.tried || (self.dirty && self.failures == 0) || self.ticks >= backoff(self.failures)
     }
 
     pub fn on_lookup(&mut self, result: Option<i32>) {
+        self.tried = true;
         self.last = result;
         self.ticks = 0;
         self.dirty = false;
+        self.failures = match result {
+            Some(_) => 0,
+            None => self.failures.saturating_add(1),
+        };
     }
 
     pub fn tick(&mut self) {
         self.ticks = self.ticks.saturating_add(1);
     }
 
+    /// Cheap mark (e.g. a foreground change): read again soon, unless reads are failing.
     pub fn invalidate(&mut self) {
         self.dirty = true;
+    }
+
+    /// The taskbar itself changed (Explorer, display or settings): read on the next render
+    /// and forget the back-off.
+    pub fn reset(&mut self) {
+        self.dirty = true;
+        self.failures = 0;
     }
 
     pub fn value(&self) -> Option<i32> {
@@ -369,9 +386,21 @@ pub fn taskbar_hwnd() -> Option<HWND> {
     unsafe { FindWindowW(w!("Shell_TrayWnd"), None) }.ok()
 }
 
+/// A taskbar wider than tall (at the bottom or top of the screen).
+pub fn is_horizontal(rect: Rect) -> bool {
+    rect.width() > rect.height()
+}
+
+/// Whether the app and tray edges are read: only for the right side of a horizontal taskbar.
+/// A vertical taskbar has no gap beside the tray, so the strip hides silently there.
+pub fn reads_edges(side: Side, rect: Rect) -> bool {
+    side == Side::Right && is_horizontal(rect)
+}
+
 /// Queries the primary taskbar. `with_icons` runs the (slower) UI Automation lookup of the
-/// Start button. The tray edge is read only when `placement` resolves to the right, and the
-/// app edge (UI Automation, see [`AppsEdgeCache`]) only then and when `with_apps` is set.
+/// Start button. The tray edge is read only when `placement` resolves to the right on a
+/// horizontal taskbar ([`reads_edges`]), and the app edge (UI Automation, see
+/// [`AppsEdgeCache`]) only then and when `with_apps` is set.
 pub fn query(with_icons: bool, with_apps: bool, placement: Placement) -> Option<TaskbarInfo> {
     let hwnd = taskbar_hwnd()?;
     let mut rect = RECT::default();
@@ -398,14 +427,15 @@ pub fn query(with_icons: bool, with_apps: bool, placement: Placement) -> Option<
     let windows_10 = is_windows_10(build);
     let left_aligned = icons_left_aligned(build, reg_dword(ADVANCED_KEY, "TaskbarAl"));
     let side = resolve_side(placement, windows_10, left_aligned);
-    let (apps_right, tray_left) = match side {
-        Side::Right => (
+    let (apps_right, tray_left) = if reads_edges(side, rect) {
+        (
             with_apps
                 .then(|| edges::apps_right(hwnd, rect, windows_10))
                 .flatten(),
             edges::tray_left(hwnd, rect),
-        ),
-        Side::Left => (None, None),
+        )
+    } else {
+        (None, None)
     };
     Some(TaskbarInfo {
         rect,
@@ -501,21 +531,70 @@ mod tests {
         use crate::ui::app::MARGIN_DIP;
         use crate::ui::render::to_px;
         let margin = to_px(MARGIN_DIP, 144);
+        assert_eq!(margin, 12);
         let i = right_info(Some(900), Some(1600));
         assert_eq!(right_gap_width(&i, margin), 700 - 2 * margin);
+        assert_eq!(right_gap_width(&i, margin), 676);
     }
 
     #[test]
-    fn apps_edge_is_read_until_it_succeeds() {
+    fn edges_are_read_only_on_the_right_of_a_horizontal_taskbar() {
+        let bottom = info(None).rect;
+        let vertical = Rect {
+            left: 1872,
+            top: 0,
+            right: 1920,
+            bottom: 1080,
+        };
+        assert!(is_horizontal(bottom));
+        assert!(!is_horizontal(vertical));
+        assert!(reads_edges(Side::Right, bottom));
+        assert!(!reads_edges(Side::Right, vertical));
+        assert!(!reads_edges(Side::Left, bottom));
+        assert!(!reads_edges(Side::Left, vertical));
+    }
+
+    /// Ticks until the cache asks for a read again.
+    fn ticks_to_lookup(c: &mut AppsEdgeCache) -> u32 {
+        let mut n = 0;
+        while !c.needs_lookup() {
+            c.tick();
+            n += 1;
+            assert!(n <= 100, "never asks again");
+        }
+        n
+    }
+
+    #[test]
+    fn apps_edge_failures_back_off_like_the_icons() {
         let mut c = AppsEdgeCache::default();
         assert!(c.needs_lookup());
-        c.on_lookup(None);
-        // A failed read is never cached as a guess; the next render retries.
-        assert!(c.needs_lookup());
-        assert_eq!(c.value(), None);
+        let mut waits = Vec::new();
+        for _ in 0..5 {
+            c.on_lookup(None);
+            // A failed read is never cached as a guess.
+            assert_eq!(c.value(), None);
+            waits.push(ticks_to_lookup(&mut c));
+        }
+        assert_eq!(waits, [10, 20, 30, 30, 30]);
+        // A success ends the back-off.
         c.on_lookup(Some(1159));
-        assert!(!c.needs_lookup());
         assert_eq!(c.value(), Some(1159));
+        assert_eq!(ticks_to_lookup(&mut c), ICON_PERIOD_TICKS);
+    }
+
+    #[test]
+    fn apps_edge_dirty_mark_waits_out_the_back_off_but_reset_does_not() {
+        let mut c = AppsEdgeCache::default();
+        c.on_lookup(None);
+        // Foreground changes do not retry a failing read on every switch.
+        c.invalidate();
+        assert!(!c.needs_lookup());
+        // Explorer, display or settings changed: read right away and drop the back-off.
+        c.reset();
+        assert!(c.needs_lookup());
+        c.on_lookup(None);
+        assert_eq!(ticks_to_lookup(&mut c), 10);
     }
 
     #[test]
