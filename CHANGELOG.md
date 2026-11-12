@@ -11,11 +11,11 @@ All notable changes to this project are documented here. The format follows
   *Strip position* choice, *Left* (default) or *Right*, applied at once. Left uses the left
   corner; Right sits next to the system tray, flush with its left edge, and follows it as tray
   icons come and go. If the chosen side has no room (Windows 10, or Windows 11 with left-aligned
-  icons) the strip moves to the other side, and it hides only when neither side fits. If you
-  picked a side and it could not be used, Windows tells you once when the strip moves or hides
-  (only after the situation lasts a few seconds); without a choice, moving right is silent and
-  hiding is notified. Clicking a notice opens Settings, which opens by itself only when the strip
-  cannot be shown at startup. You no longer need to center taskbar icons; the Widgets button
+  icons) the strip moves to the other side, and it hides only when neither side fits.
+  Windows tells you when the side you chose can't be used (moving to the right without ever
+  choosing is silent; hiding is always notified), once the situation lasts a few seconds.
+  Clicking a notice opens Settings, which opens by itself only when the strip cannot be shown at
+  startup. You no longer need to center taskbar icons; the Widgets button
   hint applies only to the left corner on Windows 11 with centered icons. The `placement` key
   in `config.json` (`auto`, `left`, `right`) still works. Vertical taskbars keep the old
   behavior (#10).
