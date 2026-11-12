@@ -1,5 +1,6 @@
 //! Taskbar geometry and environment: where the free left corner is and when to hide.
 
+use crate::config::Placement;
 use windows::Wdk::System::SystemServices::RtlGetVersion;
 use windows::Win32::Foundation::{HWND, RECT};
 use windows::Win32::Graphics::Gdi::{
@@ -164,6 +165,24 @@ pub fn is_windows_10(build: Option<u32>) -> bool {
 /// `build` is the Windows build number; `taskbar_al` is the `TaskbarAl` registry value.
 pub fn icons_left_aligned(build: Option<u32>, taskbar_al: Option<u32>) -> bool {
     is_windows_10(build) || taskbar_al == Some(0)
+}
+
+/// Which end of the taskbar the strip sits at.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Side {
+    Left,
+    Right,
+}
+
+/// Resolves the configured placement: automatic keeps the strip clear of the icons, so it
+/// goes right on Windows 10 and with left-aligned icons, left otherwise.
+pub fn resolve_side(placement: Placement, windows_10: bool, left_aligned: bool) -> Side {
+    match placement {
+        Placement::Left => Side::Left,
+        Placement::Right => Side::Right,
+        Placement::Auto if windows_10 || left_aligned => Side::Right,
+        Placement::Auto => Side::Left,
+    }
 }
 
 /// Whether the Widgets button is present and enabled. Windows 10 has no Widgets button
@@ -335,6 +354,16 @@ pub fn query(with_icons: bool) -> Option<TaskbarInfo> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn resolve_side_table() {
+        use Placement::*;
+        assert_eq!(resolve_side(Auto, true, false), Side::Right);
+        assert_eq!(resolve_side(Auto, false, true), Side::Right);
+        assert_eq!(resolve_side(Auto, false, false), Side::Left);
+        assert_eq!(resolve_side(Left, true, true), Side::Left);
+        assert_eq!(resolve_side(Right, false, false), Side::Right);
+    }
 
     fn info(icons_left: Option<i32>) -> TaskbarInfo {
         TaskbarInfo {

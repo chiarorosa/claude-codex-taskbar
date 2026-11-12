@@ -15,6 +15,19 @@ const DEFAULT_LABEL: &str = "P";
 /// Longest account label, in characters (#74).
 pub const LABEL_MAX: usize = 5;
 
+/// Which side of the taskbar the strip prefers (#10).
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum Placement {
+    Left,
+    Right,
+    /// Pick the side that fits the Windows version and taskbar alignment. Also the
+    /// fallback for unknown values, so a bad string never resets the whole file.
+    #[default]
+    #[serde(other)]
+    Auto,
+}
+
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 #[serde(default)]
 pub struct Config {
@@ -43,6 +56,8 @@ pub struct Config {
     pub claude_label: String,
     /// Shown before the Codex gauges (#74).
     pub codex_label: String,
+    /// Preferred side of the taskbar (#10).
+    pub placement: Placement,
 }
 
 impl Default for Config {
@@ -63,6 +78,7 @@ impl Default for Config {
             notify_thresholds: DEFAULT_NOTIFY_THRESHOLDS.to_vec(),
             claude_label: DEFAULT_LABEL.into(),
             codex_label: DEFAULT_LABEL.into(),
+            placement: Placement::Auto,
         }
     }
 }
@@ -202,6 +218,31 @@ mod notify_tests;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn placement_defaults_to_auto_and_old_configs_get_it() {
+        let old: Config = serde_json::from_str("{}").unwrap();
+        assert_eq!(old.placement, Placement::Auto);
+    }
+
+    #[test]
+    fn placement_roundtrips_lowercase() {
+        let cfg: Config = serde_json::from_str(r#"{"placement":"right"}"#).unwrap();
+        assert_eq!(cfg.placement, Placement::Right);
+        let path = temp_file("placement");
+        cfg.save_to(&path).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.contains(r#""placement": "right""#), "{text}");
+    }
+
+    #[test]
+    fn unknown_placement_falls_back_to_auto_without_losing_the_rest() {
+        let cfg: Config =
+            serde_json::from_str(r#"{"placement":"top","claude_enabled":true}"#).unwrap();
+        assert_eq!(cfg.placement, Placement::Auto);
+        assert!(cfg.claude_enabled);
+    }
+
     #[test]
     fn remaining_defaults_off_and_persists() {
         let old: Config = serde_json::from_str(r#"{"claude_enabled":true}"#).unwrap();
@@ -297,6 +338,7 @@ mod tests {
             notify_thresholds: vec![75, 90],
             claude_label: "W".into(),
             codex_label: "Pess".into(),
+            placement: Placement::Right,
         };
         cfg.save_to(&path).unwrap();
         assert_eq!(Config::load_from(&path), cfg);
