@@ -100,16 +100,14 @@ pub enum Key {
     KeepAliveRow,
     KeepAliveSubClaude,
     KeepAliveSubCodex,
-    HwIntervalRange,
-    LimitsIntervalRange,
     SettingsLabel,
     SettingsLabelSub,
     SettingsLabelSubAccount,
     SettingsTitle,
     SettingsProviders,
     SettingsItems,
-    SettingsHwInterval,
-    SettingsLimitsInterval,
+    SettingsRefresh,
+    SettingsRefreshSub,
     SettingsWeekSuffix,
     NotifyNearLimit,
     ShowRemaining,
@@ -204,16 +202,14 @@ impl Key {
         Key::KeepAliveRow,
         Key::KeepAliveSubClaude,
         Key::KeepAliveSubCodex,
-        Key::HwIntervalRange,
-        Key::LimitsIntervalRange,
         Key::SettingsLabel,
         Key::SettingsLabelSub,
         Key::SettingsLabelSubAccount,
         Key::SettingsTitle,
         Key::SettingsProviders,
         Key::SettingsItems,
-        Key::SettingsHwInterval,
-        Key::SettingsLimitsInterval,
+        Key::SettingsRefresh,
+        Key::SettingsRefreshSub,
         Key::SettingsWeekSuffix,
         Key::NotifyNearLimit,
         Key::ShowRemaining,
@@ -407,12 +403,6 @@ fn strings(key: Key) -> [&'static str; Lang::ALL.len()] {
             "Experimental · roda `codex login status` quando o login expira",
             "Experimental · ejecuta `codex login status` cuando la sesión caduca",
         ],
-        Key::HwIntervalRange => ["1 to 5 seconds", "1 a 5 segundos", "De 1 a 5 segundos"],
-        Key::LimitsIntervalRange => [
-            "60 to 3600 seconds",
-            "60 a 3600 segundos",
-            "De 60 a 3600 segundos",
-        ],
         Key::SettingsLabel => ["Label", "Rótulo", "Etiqueta"],
         Key::SettingsLabelSub => [
             "Shown before the gauges · up to 5 characters",
@@ -435,15 +425,15 @@ fn strings(key: Key) -> [&'static str; Lang::ALL.len()] {
             "Itens na faixa",
             "Elementos en la franja",
         ],
-        Key::SettingsHwInterval => [
-            "Hardware refresh",
-            "Atualização do hardware",
-            "Actualización del hardware",
+        Key::SettingsRefresh => [
+            "Refresh (seconds)",
+            "Atualização (segundos)",
+            "Actualización (segundos)",
         ],
-        Key::SettingsLimitsInterval => [
-            "Limits refresh",
-            "Atualização dos limites",
-            "Actualización de los límites",
+        Key::SettingsRefreshSub => [
+            "Hardware 1–5 · Limits 60–3600",
+            "Hardware 1–5 · Limites 60–3600",
+            "Hardware 1–5 · Límites 60–3600",
         ],
         Key::SettingsWeekSuffix => ["weekly", "semanal", "semanal"],
         Key::ShowRemaining => [
@@ -678,6 +668,46 @@ mod tests {
         assert_eq!(lang_from_langid(0x0816), Lang::PtBr); // pt-PT
         assert_eq!(lang_from_langid(0x0409), Lang::En);
         assert_eq!(lang_from_langid(0x0407), Lang::En); // de-DE falls back to English
+    }
+
+    #[test]
+    fn the_refresh_row_reads_well_in_every_language() {
+        let row = |lang| {
+            [
+                Key::SettingsRefresh,
+                Key::SettingsRefreshSub,
+                Key::SettingsHardware,
+                Key::SettingsLimits,
+            ]
+            .map(|key| t(lang, key))
+        };
+        assert_eq!(
+            row(Lang::En),
+            [
+                "Refresh (seconds)",
+                "Hardware 1–5 · Limits 60–3600",
+                "Hardware",
+                "Limits"
+            ]
+        );
+        assert_eq!(
+            row(Lang::PtBr),
+            [
+                "Atualização (segundos)",
+                "Hardware 1–5 · Limites 60–3600",
+                "Hardware",
+                "Limites"
+            ]
+        );
+        assert_eq!(
+            row(Lang::Es),
+            [
+                "Actualización (segundos)",
+                "Hardware 1–5 · Límites 60–3600",
+                "Hardware",
+                "Límites"
+            ]
+        );
     }
 
     #[test]

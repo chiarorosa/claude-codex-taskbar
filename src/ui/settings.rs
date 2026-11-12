@@ -418,15 +418,13 @@ fn blocks(facts: &Facts, checks: &[(Toggle, String, bool)]) -> Vec<Block> {
             indent: false,
             state_text: state(&Toggle::NotifyNearLimit),
         },
-        Row::Number {
-            id: ID_HW,
-            title: t(lang, Key::SettingsHwInterval).to_string(),
-            sub: t(lang, Key::HwIntervalRange).to_string(),
-        },
-        Row::Number {
-            id: ID_LIMITS,
-            title: t(lang, Key::SettingsLimitsInterval).to_string(),
-            sub: t(lang, Key::LimitsIntervalRange).to_string(),
+        Row::NumberPair {
+            title: t(lang, Key::SettingsRefresh).to_string(),
+            sub: t(lang, Key::SettingsRefreshSub).to_string(),
+            fields: [
+                (ID_HW, t(lang, Key::SettingsHardware).to_string()),
+                (ID_LIMITS, t(lang, Key::SettingsLimits).to_string()),
+            ],
         },
         update_row(lang, &facts.update),
     ]));
@@ -1684,6 +1682,65 @@ mod tests {
             update: UpdateView::Idle,
             side: Side::Left,
         }
+    }
+
+    #[test]
+    fn the_refresh_intervals_share_one_row_in_every_language() {
+        let pair =
+            |lang| {
+                let model = blocks(
+                    &Facts {
+                        lang,
+                        ..sample_facts()
+                    },
+                    &[],
+                );
+                let Some(Block::Card(rows)) = model.last() else {
+                    panic!("{model:?}");
+                };
+                let pairs: Vec<_> = rows
+                    .iter()
+                    .filter(|r| matches!(r, Row::NumberPair { .. }))
+                    .cloned()
+                    .collect();
+                assert_eq!(pairs.len(), 1, "{rows:?}");
+                assert!(!rows.iter().any(
+                    |r| matches!(r, Row::Number { id, .. } if *id == ID_HW || *id == ID_LIMITS)
+                ));
+                pairs[0].clone()
+            };
+        let row = |title: &str, sub: &str, hw: &str, limits: &str| Row::NumberPair {
+            title: title.into(),
+            sub: sub.into(),
+            fields: [(ID_HW, hw.into()), (ID_LIMITS, limits.into())],
+        };
+        assert_eq!(
+            pair(Lang::En),
+            row(
+                "Refresh (seconds)",
+                "Hardware 1–5 · Limits 60–3600",
+                "Hardware",
+                "Limits"
+            )
+        );
+        assert_eq!(
+            pair(Lang::PtBr),
+            row(
+                "Atualização (segundos)",
+                "Hardware 1–5 · Limites 60–3600",
+                "Hardware",
+                "Limites"
+            )
+        );
+        assert_eq!(
+            pair(Lang::Es),
+            row(
+                "Actualización (segundos)",
+                "Hardware 1–5 · Límites 60–3600",
+                "Hardware",
+                "Límites"
+            )
+        );
     }
 
     #[test]

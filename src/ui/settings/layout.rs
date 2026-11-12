@@ -21,6 +21,9 @@ pub const FIELD_H: f32 = 28.0;
 pub const INDENT: f32 = 34.0;
 /// Space between a row's text and its control, and between a state text and its switch.
 const GAP: f32 = 10.0;
+/// A pair row: space between a field's label and the field, and between the stacked fields.
+const LABEL_GAP: f32 = 8.0;
+const FIELD_GAP: f32 = 4.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TextRole {
@@ -64,6 +67,12 @@ pub enum Row {
         id: usize,
         title: String,
         sub: String,
+    },
+    /// Two number fields stacked on the right, each with a short label to its left.
+    NumberPair {
+        title: String,
+        sub: String,
+        fields: [(usize, String); 2],
     },
     /// A push button on the right, drawn like a chip (#117).
     Button {
@@ -192,6 +201,36 @@ impl Out<'_> {
                 let row_h = self.text_row(title, sub, left, control_x - GAP, top, FIELD_H);
                 let rect = self.px(control_x, top + (row_h - FIELD_H) / 2.0, FIELD_W, FIELD_H);
                 self.page.controls.push((*id, rect));
+                row_h
+            }
+            Row::NumberPair { title, sub, fields } => {
+                let control_x = right - FIELD_W;
+                // Slack keeps DirectWrite from wrapping text that exactly fills its rect.
+                let label_w = |l: &str| self.m.width(l, TextRole::Body).ceil() + 2.0;
+                let widest = fields.iter().map(|(_, l)| label_w(l)).fold(0.0, f32::max);
+                let stack_h = 2.0 * FIELD_H + FIELD_GAP;
+                let text_right = control_x - LABEL_GAP - widest - GAP;
+                let sub = Some((sub.as_str(), Ink::Sub));
+                let row_h = self.text_row(title, sub, left, text_right, top, stack_h);
+                let mut y = top + (row_h - stack_h) / 2.0;
+                for (id, label) in fields {
+                    let rect = self.px(control_x, y, FIELD_W, FIELD_H);
+                    self.page.controls.push((*id, rect));
+                    let (w, h) = (
+                        label_w(label),
+                        self.m.height(label, TextRole::Body, f32::MAX),
+                    );
+                    let x = control_x - LABEL_GAP - w;
+                    self.text(
+                        label,
+                        TextRole::Body,
+                        Ink::Text,
+                        x,
+                        y + (FIELD_H - h) / 2.0,
+                        w,
+                    );
+                    y += FIELD_H + FIELD_GAP;
+                }
                 row_h
             }
             Row::Button {
@@ -508,6 +547,59 @@ mod tests {
         assert!(r.y >= card.y && r.y + r.h <= card.y + card.h);
         let title = p.texts.iter().find(|t| t.text == "Strip position").unwrap();
         assert!(title.rect.x + title.rect.w <= l.x);
+    }
+
+    #[test]
+    fn a_number_pair_stacks_two_right_aligned_fields_with_labels() {
+        let row = Row::NumberPair {
+            title: "Refresh (seconds)".into(),
+            sub: "Hardware 1–5 · Limits 60–3600".into(),
+            fields: [(10, "Hardware".into()), (11, "Limits".into())],
+        };
+        let p = layout("T", &[Block::Card(vec![row])], 1.0, &Fake);
+        let card = p.cards[0];
+        let ids: Vec<usize> = p.controls.iter().map(|(i, _)| *i).collect();
+        assert_eq!(ids, [10, 11], "Hardware first, so the tab order matches");
+        let (a, b) = (p.controls[0].1, p.controls[1].1);
+        for f in [a, b] {
+            assert_eq!((f.w, f.h), (64, 28), "DESIGN.md number field");
+            assert_eq!(f.x + f.w, card.x + card.w - 14, "right-aligned in the row");
+            assert!(f.y >= card.y + 10 && f.y + f.h <= card.y + card.h - 10);
+        }
+        assert_eq!(a.x, b.x);
+        assert_eq!(a.y + a.h + 4, b.y, "stacked on the 4 DIP grid, no overlap");
+        let title = p
+            .texts
+            .iter()
+            .find(|t| t.text == "Refresh (seconds)")
+            .unwrap();
+        let sub = p
+            .texts
+            .iter()
+            .find(|t| t.text.starts_with("Hardware 1"))
+            .unwrap();
+        assert_eq!(
+            (title.role, sub.role, sub.ink),
+            (TextRole::Body, TextRole::Secondary, Ink::Sub)
+        );
+        assert!(sub.rect.y > title.rect.y);
+        for (label, field) in [("Hardware", a), ("Limits", b)] {
+            let l = p.texts.iter().find(|t| t.text == label).unwrap();
+            assert_eq!((l.role, l.ink), (TextRole::Body, Ink::Text));
+            assert_eq!(
+                l.rect.x + l.rect.w + 8,
+                field.x,
+                "{label} right-aligned to its field"
+            );
+            assert!(
+                l.rect.w > Fake.width(label, TextRole::Body) as i32,
+                "{label} never wraps"
+            );
+            let (lc, fc) = (l.rect.y + l.rect.h / 2, field.y + field.h / 2);
+            assert!((lc - fc).abs() <= 1, "{label} centered on its field");
+            assert!(title.rect.x + title.rect.w <= l.rect.x);
+            assert!(sub.rect.x + sub.rect.w <= l.rect.x);
+        }
     }
 
     #[test]
