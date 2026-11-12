@@ -71,7 +71,7 @@ pub struct TaskbarInfo {
     pub apps_right: Option<i32>,
     /// Left edge of the system tray (screen px); `None` when unknown.
     pub tray_left: Option<i32>,
-    /// Which end of the taskbar the strip sits at; edges are read only for [`Side::Right`].
+    /// Which end of the taskbar the strip is drawn at (set by the render).
     pub side: Side,
 }
 
@@ -286,17 +286,6 @@ pub fn place(order: [Side; 2], fits: impl Fn(Side) -> bool) -> Placed {
     }
 }
 
-/// Side used by [`query`] until it takes the resolved side from the caller: the first
-/// preferred side, except that `Auto` keeps the strip clear of the icons, so it goes right
-/// on Windows 10 and with left-aligned icons.
-fn query_side(placement: Placement, windows_10: bool, left_aligned: bool) -> Side {
-    if placement == Placement::Auto && (windows_10 || left_aligned) {
-        Side::Right
-    } else {
-        side_order(placement)[0]
-    }
-}
-
 /// Whether the Widgets button is present and enabled. Windows 10 has no Widgets button
 /// at all; on Windows 11 a missing `TaskbarDa` means the default, which is on.
 pub fn widgets_button_on(build: Option<u32>, taskbar_da: Option<u32>) -> bool {
@@ -426,17 +415,18 @@ pub fn is_horizontal(rect: Rect) -> bool {
     rect.width() > rect.height()
 }
 
-/// Whether the app and tray edges are read: only for the right side of a horizontal taskbar.
-/// A vertical taskbar has no gap beside the tray, so the strip hides silently there.
-pub fn reads_edges(side: Side, rect: Rect) -> bool {
-    side == Side::Right && is_horizontal(rect)
+/// Whether the app and tray edges are read: only when asked for and on a horizontal
+/// taskbar. A vertical taskbar has no gap beside the tray, so the right side never fits there.
+pub fn reads_edges(with_edges: bool, rect: Rect) -> bool {
+    with_edges && is_horizontal(rect)
 }
 
 /// Queries the primary taskbar. `with_icons` runs the (slower) UI Automation lookup of the
-/// Start button. The tray edge is read only when `placement` resolves to the right on a
-/// horizontal taskbar ([`reads_edges`]), and the app edge (UI Automation, see
-/// [`AppsEdgeCache`]) only then and when `with_apps` is set.
-pub fn query(with_icons: bool, with_apps: bool, placement: Placement) -> Option<TaskbarInfo> {
+/// Start button. The tray edge is read only when `with_edges` is set on a horizontal taskbar
+/// ([`reads_edges`]), and the app edge (UI Automation, see [`AppsEdgeCache`]) only then and
+/// when `with_apps` is set. [`TaskbarInfo::side`] is left at [`Side::Left`]; the render sets
+/// the side it draws.
+pub fn query(with_icons: bool, with_apps: bool, with_edges: bool) -> Option<TaskbarInfo> {
     let hwnd = taskbar_hwnd()?;
     let mut rect = RECT::default();
     // SAFETY: hwnd is a live window; rect is a valid out pointer.
@@ -461,8 +451,7 @@ pub fn query(with_icons: bool, with_apps: bool, placement: Placement) -> Option<
     let overlap = rect.bottom.min(monitor.bottom) - rect.top.max(monitor.top);
     let windows_10 = is_windows_10(build);
     let left_aligned = icons_left_aligned(build, reg_dword(ADVANCED_KEY, "TaskbarAl"));
-    let side = query_side(placement, windows_10, left_aligned);
-    let (apps_right, tray_left) = if reads_edges(side, rect) {
+    let (apps_right, tray_left) = if reads_edges(with_edges, rect) {
         (
             with_apps
                 .then(|| edges::apps_right(hwnd, rect, windows_10))
@@ -489,7 +478,7 @@ pub fn query(with_icons: bool, with_apps: bool, placement: Placement) -> Option<
         },
         apps_right,
         tray_left,
-        side,
+        side: Side::Left,
     })
 }
 
@@ -593,7 +582,7 @@ mod tests {
     }
 
     #[test]
-    fn edges_are_read_only_on_the_right_of_a_horizontal_taskbar() {
+    fn edges_are_read_only_when_asked_on_a_horizontal_taskbar() {
         let bottom = info(None).rect;
         let vertical = Rect {
             left: 1872,
@@ -603,10 +592,10 @@ mod tests {
         };
         assert!(is_horizontal(bottom));
         assert!(!is_horizontal(vertical));
-        assert!(reads_edges(Side::Right, bottom));
-        assert!(!reads_edges(Side::Right, vertical));
-        assert!(!reads_edges(Side::Left, bottom));
-        assert!(!reads_edges(Side::Left, vertical));
+        assert!(reads_edges(true, bottom));
+        assert!(!reads_edges(true, vertical));
+        assert!(!reads_edges(false, bottom));
+        assert!(!reads_edges(false, vertical));
     }
 
     /// Ticks until the cache asks for a read again.
@@ -821,7 +810,7 @@ mod live {
                 windows::Win32::System::Com::COINIT_APARTMENTTHREADED,
             );
         }
-        let info = super::query(true, true, crate::config::Placement::Auto).expect("taskbar");
+        let info = super::query(true, true, true).expect("taskbar");
         println!("{info:?} available={}", super::available_width(&info, 8));
         assert!(info.rect.width() > 0 && info.dpi >= 96);
     }

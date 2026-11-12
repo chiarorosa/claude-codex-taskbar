@@ -5,7 +5,7 @@ use super::layout::layout;
 use super::render::{GAP, Renderer, SEP_W, to_px};
 use super::taskbar;
 use super::view::build_items;
-use crate::config::{Config, Placement};
+use crate::config::Config;
 use crate::hw::Sampler;
 use crate::i18n::Lang;
 use crate::limits::ProviderStatus;
@@ -32,9 +32,9 @@ fn idle_cost() {
     unsafe {
         let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
     }
-    let info = taskbar::query(false, false, Placement::Auto).expect("taskbar");
+    let info = taskbar::query(false, false, false).expect("taskbar");
     // Warms the edge cache, so "right query warm" times the steady per-render cost.
-    taskbar::query(false, true, Placement::Right).expect("taskbar");
+    taskbar::query(false, true, true).expect("taskbar");
     let dpi = info.dpi;
     let mut sampler = Sampler::new();
     sampler.sample();
@@ -77,32 +77,32 @@ fn idle_cost() {
         (
             "taskbar query",
             time_us(200, || {
-                taskbar::query(false, false, Placement::Auto);
+                taskbar::query(false, false, false);
             }),
         ),
         (
             "right query warm",
             time_us(200, || {
-                taskbar::query(false, true, Placement::Right);
+                taskbar::query(false, true, true);
             }),
         ),
         (
             "right query cached",
             time_us(200, || {
-                taskbar::query(false, false, Placement::Right);
+                taskbar::query(false, false, true);
             }),
         ),
         (
             "right query cold",
             time_us(20, || {
                 taskbar::invalidate_edges();
-                taskbar::query(false, true, Placement::Right);
+                taskbar::query(false, true, true);
             }),
         ),
         (
             "icon lookup",
             time_us(20, || {
-                taskbar::query(true, false, Placement::Auto);
+                taskbar::query(true, false, false);
             }),
         ),
         (

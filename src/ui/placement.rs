@@ -1,122 +1,33 @@
-//! Placement watch: turns per-attempt placement outcomes into a settled
-//! failure flag and at most one notification per CCT run. Pure logic, no Win32: the
+//! Placement watch (#10): turns each render's [`Placed`] into notices. A state other than
+//! the preferred side (the other side, or hidden) raises one notice once it settles; it is
+//! not repeated while that state lasts, and returning to the preferred side is silent. A
+//! fallback for `Auto` (never chosen in Settings) is silent too. Pure logic, no Win32: the
 //! caller passes the time as whole seconds from a monotonic clock.
 
-use super::taskbar::{Placed, Side, TaskbarInfo, is_horizontal};
+use super::taskbar::{Placed, Side, side_order};
+use crate::config::Placement;
 
-/// How long a failure (`NoRoom` or `LookupFailed`, in any mix) must last, without a
-/// `Placed` in between, before it settles.
+/// How long a non-preferred state must last, unchanged, before it settles.
 pub const SETTLE_SECS: u64 = 10;
 
-/// Nothing settles within this many seconds of startup or of the last
-/// [`LegacyWatch::restart`] (Explorer and the taskbar are still settling then).
+/// Nothing settles within this many seconds of startup, of the last
+/// [`PlacementWatch::restart`] (Explorer and the taskbar are still settling then) or of the
+/// last [`PlacementWatch::reset`].
 pub const GRACE_SECS: u64 = 30;
 
-/// Result of one attempt to place the strip next to the tray.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum LegacyOutcome {
-    Placed,
-    /// Both edges were read but the gap is too small.
-    NoRoom,
-    /// The tray geometry could not be read.
-    LookupFailed,
-}
-
-/// What one uncovered render means for the watch: `None` on the left side and on a
-/// vertical taskbar, which hide silently as before and never notify; on the right of a
-/// horizontal taskbar, a missing edge is a failed lookup and a layout with no width (both
-/// edges read) means the gap is too small.
-pub fn legacy_outcome_of(
-    side: Side,
-    info: &TaskbarInfo,
-    layout_width: i32,
-) -> Option<LegacyOutcome> {
-    match side {
-        Side::Left => None,
-        Side::Right if !is_horizontal(info.rect) => None,
-        Side::Right if info.apps_right.is_none() || info.tray_left.is_none() => {
-            Some(LegacyOutcome::LookupFailed)
+/// Whether the next taskbar query should read the right-side edges: when the right side is
+/// preferred, or the left side had no room at the last render (or, before any render, the
+/// icons are left-aligned). A left-side strip that fits never pays for the edge lookups.
+pub fn wants_edges(
+    placement: Placement,
+    left_fitted_last: Option<bool>,
+    left_aligned: bool,
+) -> bool {
+    side_order(placement)[0] == Side::Right
+        || match left_fitted_last {
+            Some(fitted) => !fitted,
+            None => left_aligned,
         }
-        Side::Right if layout_width == 0 => Some(LegacyOutcome::NoRoom),
-        Side::Right => Some(LegacyOutcome::Placed),
-    }
-}
-
-/// What the caller should do after an observation.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Verdict {
-    pub settled_failure: bool,
-    pub notify: bool,
-}
-
-/// Lives for one CCT run. The startup grace period starts at second 0.
-#[derive(Default, Debug)]
-pub struct LegacyWatch {
-    /// Start of the current grace period.
-    grace_from: u64,
-    /// When the current, uninterrupted failure began.
-    failing_since: Option<u64>,
-    settled: bool,
-    /// The one notice of this run has been raised.
-    notified: bool,
-    /// The strip has been placed next to the tray at least once this run.
-    ever_placed: bool,
-    /// The raised notice is still to be delivered; `true` when it should open Settings.
-    pending: Option<bool>,
-}
-
-impl LegacyWatch {
-    pub fn observe(&mut self, outcome: LegacyOutcome, now_secs: u64) -> Verdict {
-        match outcome {
-            LegacyOutcome::Placed => {
-                self.failing_since = None;
-                self.settled = false;
-                self.ever_placed = true;
-                self.pending = None;
-            }
-            LegacyOutcome::NoRoom | LegacyOutcome::LookupFailed => {
-                let since = *self.failing_since.get_or_insert(now_secs);
-                let past_grace = now_secs >= self.grace_from.saturating_add(GRACE_SECS);
-                if past_grace && now_secs.saturating_sub(since) >= SETTLE_SECS {
-                    self.settled = true;
-                }
-            }
-        }
-        let notify = self.settled && !self.notified;
-        if notify {
-            self.notified = true;
-            // Only the startup decision opens Settings; a failure that settles after the
-            // strip was placed shows the balloon alone.
-            self.pending = Some(!self.ever_placed);
-        }
-        Verdict {
-            settled_failure: self.settled,
-            notify,
-        }
-    }
-
-    /// Explorer restarted (`TaskbarCreated`): forget the current failure and start a new
-    /// grace period. The one notice per run stays used.
-    pub fn restart(&mut self, now_secs: u64) {
-        self.grace_from = now_secs;
-        self.failing_since = None;
-        self.settled = false;
-    }
-
-    pub fn settled_failure(&self) -> bool {
-        self.settled
-    }
-
-    /// The notice still to be delivered, while its failure is settled: `Some(true)` when it
-    /// should also open Settings.
-    pub fn pending_notice(&self) -> Option<bool> {
-        self.pending.filter(|_| self.settled)
-    }
-
-    /// The pending notice has been delivered.
-    pub fn notice_sent(&mut self) {
-        self.pending = None;
-    }
 }
 
 /// Which message a settled placement state raises.
@@ -145,7 +56,8 @@ pub struct PlacementWatch {
     current: Option<(Placed, u64)>,
     /// The current state, once it has held long enough.
     settled: Option<Placed>,
-    /// The last state that raised (or was exempt from) a notice; cleared by `Preferred`.
+    /// The last state that raised a notice; cleared by `Preferred` and when an undelivered
+    /// notice is dropped.
     last_notified: Option<Placed>,
     /// The strip has been shown this run (since the last reset).
     ever_shown: bool,
@@ -164,9 +76,10 @@ impl PlacementWatch {
             Placed::Fallback(_) | Placed::Hidden => {
                 if self.current.map(|(state, _)| state) != Some(placed) {
                     // After a restart `current` is empty and a pending notice is kept
-                    // until the state settles again; a different state drops it.
-                    if self.current.is_some() {
-                        self.pending = None;
+                    // until the state settles again; a different state drops it, and an
+                    // undelivered notice does not count as notified.
+                    if self.current.is_some() && self.pending.take().is_some() {
+                        self.last_notified = None;
                     }
                     self.current = Some((placed, now_secs));
                     self.settled = None;
@@ -243,259 +156,6 @@ impl PlacementWatch {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::ui::taskbar::Rect;
-
-    fn v(settled_failure: bool, notify: bool) -> Verdict {
-        Verdict {
-            settled_failure,
-            notify,
-        }
-    }
-
-    /// Seconds well after the startup grace period.
-    const LATER: u64 = 100;
-
-    /// A watch whose strip has been placed once, well after startup.
-    fn placed_watch() -> LegacyWatch {
-        let mut w = LegacyWatch::default();
-        assert_eq!(w.observe(LegacyOutcome::Placed, LATER - 1), v(false, false));
-        w
-    }
-
-    #[test]
-    fn nothing_settles_during_the_startup_grace_period() {
-        let mut w = LegacyWatch::default();
-        for now in 0..GRACE_SECS {
-            assert_eq!(
-                w.observe(LegacyOutcome::NoRoom, now),
-                v(false, false),
-                "{now}"
-            );
-        }
-        // Failing since 0: the failure settles as soon as the grace period ends.
-        assert_eq!(w.observe(LegacyOutcome::NoRoom, GRACE_SECS), v(true, true));
-        assert!(w.settled_failure());
-    }
-
-    #[test]
-    fn a_transient_failure_during_grace_never_settles() {
-        let mut w = LegacyWatch::default();
-        for now in 0..25 {
-            assert!(!w.observe(LegacyOutcome::LookupFailed, now).notify);
-        }
-        assert_eq!(w.observe(LegacyOutcome::Placed, 25), v(false, false));
-        assert_eq!(
-            w.observe(LegacyOutcome::Placed, GRACE_SECS + 5),
-            v(false, false)
-        );
-        // A new failure after grace starts its own clock.
-        assert_eq!(w.observe(LegacyOutcome::NoRoom, 40), v(false, false));
-        assert_eq!(w.observe(LegacyOutcome::NoRoom, 49), v(false, false));
-        assert!(!w.settled_failure());
-    }
-
-    #[test]
-    fn a_failure_settles_after_ten_seconds_not_nine() {
-        for outcome in [LegacyOutcome::NoRoom, LegacyOutcome::LookupFailed] {
-            let mut w = placed_watch();
-            assert_eq!(w.observe(outcome, LATER), v(false, false));
-            assert_eq!(w.observe(outcome, LATER + SETTLE_SECS - 1), v(false, false));
-            assert_eq!(w.observe(outcome, LATER + SETTLE_SECS), v(true, true));
-        }
-    }
-
-    #[test]
-    fn a_success_restarts_the_settle_clock() {
-        let mut w = placed_watch();
-        w.observe(LegacyOutcome::LookupFailed, LATER);
-        w.observe(LegacyOutcome::Placed, LATER + 9);
-        assert_eq!(
-            w.observe(LegacyOutcome::LookupFailed, LATER + 10),
-            v(false, false)
-        );
-        assert_eq!(
-            w.observe(LegacyOutcome::LookupFailed, LATER + 19),
-            v(false, false)
-        );
-        assert_eq!(
-            w.observe(LegacyOutcome::LookupFailed, LATER + 20),
-            v(true, true)
-        );
-    }
-
-    #[test]
-    fn no_room_then_lookup_failed_is_one_continuous_failure() {
-        let mut w = placed_watch();
-        assert_eq!(w.observe(LegacyOutcome::NoRoom, LATER), v(false, false));
-        assert_eq!(
-            w.observe(LegacyOutcome::LookupFailed, LATER + 5),
-            v(false, false)
-        );
-        assert_eq!(
-            w.observe(LegacyOutcome::LookupFailed, LATER + 10),
-            v(true, true)
-        );
-    }
-
-    #[test]
-    fn restart_opens_a_new_grace_period() {
-        let mut w = placed_watch();
-        w.observe(LegacyOutcome::NoRoom, LATER);
-        assert!(w.observe(LegacyOutcome::NoRoom, LATER + 10).settled_failure);
-        w.restart(LATER + 20);
-        assert!(!w.settled_failure());
-        for now in LATER + 20..LATER + 20 + GRACE_SECS {
-            assert!(
-                !w.observe(LegacyOutcome::NoRoom, now).settled_failure,
-                "{now}"
-            );
-        }
-        // Settles again after the new grace period, but the one notice was already used.
-        assert_eq!(
-            w.observe(LegacyOutcome::NoRoom, LATER + 20 + GRACE_SECS),
-            v(true, false)
-        );
-    }
-
-    #[test]
-    fn notifies_once_then_recovers_silently() {
-        let mut w = placed_watch();
-        w.observe(LegacyOutcome::NoRoom, LATER);
-        assert_eq!(w.observe(LegacyOutcome::NoRoom, LATER + 10), v(true, true));
-        assert_eq!(w.observe(LegacyOutcome::NoRoom, LATER + 11), v(true, false));
-        assert_eq!(
-            w.observe(LegacyOutcome::Placed, LATER + 12),
-            v(false, false)
-        );
-        w.observe(LegacyOutcome::NoRoom, LATER + 20);
-        assert_eq!(w.observe(LegacyOutcome::NoRoom, LATER + 30), v(true, false));
-    }
-
-    #[test]
-    fn a_startup_failure_opens_settings() {
-        let mut w = LegacyWatch::default();
-        assert_eq!(w.pending_notice(), None);
-        w.observe(LegacyOutcome::NoRoom, 0);
-        w.observe(LegacyOutcome::NoRoom, GRACE_SECS);
-        assert_eq!(w.pending_notice(), Some(true));
-        w.notice_sent();
-        assert_eq!(w.pending_notice(), None);
-    }
-
-    #[test]
-    fn a_runtime_failure_shows_only_the_balloon() {
-        let mut w = placed_watch();
-        w.observe(LegacyOutcome::NoRoom, LATER);
-        w.observe(LegacyOutcome::NoRoom, LATER + 10);
-        assert_eq!(w.pending_notice(), Some(false));
-    }
-
-    #[test]
-    fn going_back_to_placed_drops_the_pending_notice() {
-        let mut w = placed_watch();
-        w.observe(LegacyOutcome::NoRoom, LATER);
-        w.observe(LegacyOutcome::NoRoom, LATER + 10);
-        w.observe(LegacyOutcome::Placed, LATER + 11);
-        assert_eq!(w.pending_notice(), None);
-        w.observe(LegacyOutcome::NoRoom, LATER + 20);
-        w.observe(LegacyOutcome::NoRoom, LATER + 30);
-        assert_eq!(w.pending_notice(), None, "one notice per run");
-    }
-
-    #[test]
-    fn a_pending_notice_waits_while_the_failure_is_not_settled() {
-        let mut w = placed_watch();
-        w.observe(LegacyOutcome::NoRoom, LATER);
-        w.observe(LegacyOutcome::NoRoom, LATER + 10);
-        w.restart(LATER + 11);
-        assert_eq!(w.pending_notice(), None);
-        w.observe(LegacyOutcome::NoRoom, LATER + 11);
-        w.observe(LegacyOutcome::NoRoom, LATER + 11 + GRACE_SECS);
-        assert_eq!(w.pending_notice(), Some(false));
-    }
-
-    fn info(apps_right: Option<i32>, tray_left: Option<i32>) -> TaskbarInfo {
-        let bar = Rect {
-            left: 0,
-            top: 1032,
-            right: 1920,
-            bottom: 1080,
-        };
-        TaskbarInfo {
-            rect: bar,
-            monitor: bar,
-            dpi: 96,
-            autohide: false,
-            visible: true,
-            left_aligned: false,
-            windows_10: true,
-            widgets_button_on: false,
-            icons_left: None,
-            apps_right,
-            tray_left,
-            side: Side::Right,
-        }
-    }
-
-    #[test]
-    fn left_side_never_feeds_the_watch() {
-        for i in [info(None, None), info(Some(900), Some(1600))] {
-            assert_eq!(legacy_outcome_of(Side::Left, &i, 0), None);
-            assert_eq!(legacy_outcome_of(Side::Left, &i, 300), None);
-        }
-    }
-
-    #[test]
-    fn a_vertical_taskbar_never_feeds_the_watch() {
-        let vertical = TaskbarInfo {
-            rect: Rect {
-                left: 1872,
-                top: 0,
-                right: 1920,
-                bottom: 1080,
-            },
-            ..info(None, None)
-        };
-        assert_eq!(legacy_outcome_of(Side::Right, &vertical, 0), None);
-        assert_eq!(legacy_outcome_of(Side::Right, &vertical, 300), None);
-    }
-
-    #[test]
-    fn a_missing_edge_is_a_lookup_failure() {
-        for i in [
-            info(None, Some(1600)),
-            info(Some(900), None),
-            info(None, None),
-        ] {
-            assert_eq!(
-                legacy_outcome_of(Side::Right, &i, 0),
-                Some(LegacyOutcome::LookupFailed)
-            );
-        }
-    }
-
-    #[test]
-    fn both_edges_and_no_width_is_no_room() {
-        let i = info(Some(1590), Some(1600));
-        assert_eq!(
-            legacy_outcome_of(Side::Right, &i, 0),
-            Some(LegacyOutcome::NoRoom)
-        );
-    }
-
-    #[test]
-    fn both_edges_and_a_width_is_placed() {
-        let i = info(Some(900), Some(1600));
-        assert_eq!(
-            legacy_outcome_of(Side::Right, &i, 300),
-            Some(LegacyOutcome::Placed)
-        );
-    }
-}
-
-#[cfg(test)]
-mod watch_tests {
     use super::*;
     use crate::ui::taskbar::Placed::{Fallback, Hidden, Preferred};
 
@@ -669,5 +329,45 @@ mod watch_tests {
         w.observe(Hidden, true, LATER + GRACE_SECS);
         w.observe(Hidden, true, LATER + GRACE_SECS + SETTLE_SECS);
         assert_eq!(w.pending_notice(), notice(NoticeKind::Hidden, true));
+    }
+
+    #[test]
+    fn a_dropped_pending_notice_does_not_silence_a_return_to_its_state() {
+        let mut w = shown_watch();
+        w.observe(Fallback(Side::Right), true, LATER);
+        w.observe(Fallback(Side::Right), true, LATER + 10);
+        assert!(w.pending_notice().is_some());
+        // Not delivered (e.g. fullscreen app), then a short excursion drops it.
+        w.observe(Hidden, true, LATER + 11);
+        w.observe(Fallback(Side::Right), true, LATER + 15);
+        w.observe(Fallback(Side::Right), true, LATER + 15 + SETTLE_SECS);
+        assert_eq!(w.pending_notice(), notice(NoticeKind::MovedRight, false));
+    }
+
+    #[test]
+    fn wants_edges_table() {
+        use Placement::{Auto, Left, Right};
+        // (placement, left fitted at the last render, left-aligned icons) -> read edges
+        let table = [
+            (Right, None, false, true),
+            (Right, Some(true), false, true),
+            (Right, Some(false), true, true),
+            (Left, Some(true), false, false),
+            (Left, Some(true), true, false),
+            (Left, Some(false), false, true),
+            (Left, None, false, false),
+            (Left, None, true, true),
+            (Auto, Some(true), false, false),
+            (Auto, Some(false), false, true),
+            (Auto, None, false, false),
+            (Auto, None, true, true),
+        ];
+        for (placement, fitted, aligned, want) in table {
+            assert_eq!(
+                wants_edges(placement, fitted, aligned),
+                want,
+                "{placement:?} {fitted:?} {aligned}"
+            );
+        }
     }
 }

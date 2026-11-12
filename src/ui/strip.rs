@@ -1,6 +1,7 @@
 //! The strip window: creation, message handling, timers, tooltip and context menu.
 
 use super::app::{App, spawn_worker};
+use super::placement::{Notice as PlacementNotice, NoticeKind};
 use std::cell::RefCell;
 use std::sync::atomic::{AtomicIsize, Ordering};
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, WPARAM};
@@ -145,13 +146,25 @@ fn reassert_topmost(hwnd: HWND) {
 }
 
 fn render(hwnd: HWND) {
-    let Some((need_icons, need_apps, placement)) =
-        with_app(|app| (app.needs_icons(), app.needs_apps_edge(), app.cfg.placement))
+    let Some((need_icons, need_apps, with_edges)) =
+        with_app(|app| (app.needs_icons(), app.needs_apps_edge(), app.needs_edges()))
     else {
         return;
     };
-    let info = super::taskbar::query(need_icons, need_apps, placement);
-    with_app(|app| app.render(hwnd, info, need_icons, need_apps));
+    render_once(hwnd, need_icons, need_apps, with_edges);
+    // The left side just ran out of room: look at the right side now instead of hiding
+    // until the next render.
+    if !with_edges && with_app(|app| app.needs_edges()) == Some(true) {
+        let need_apps = with_app(|app| app.needs_apps_edge()).unwrap_or(false);
+        render_once(hwnd, false, need_apps, true);
+    }
+}
+
+fn render_once(hwnd: HWND, need_icons: bool, need_apps: bool, with_edges: bool) {
+    let info = super::taskbar::query(need_icons, need_apps, with_edges);
+    // The app edge is looked up only together with the other edges.
+    let looked_up_apps = need_apps && with_edges;
+    with_app(|app| app.render(hwnd, info, need_icons, looked_up_apps, with_edges));
 }
 
 /// What to do with the pending placement notice right now.
@@ -159,37 +172,38 @@ fn render(hwnd: HWND) {
 enum NoticeStep {
     /// Nothing pending, or it cannot be delivered yet: it stays pending.
     Wait,
-    Balloon,
-    /// The startup decision: the balloon and Settings, where fewer items can be chosen.
-    BalloonAndSettings,
+    Balloon(NoticeKind),
+    /// Hidden at startup: the balloon and Settings, where fewer items can be chosen.
+    BalloonAndSettings(NoticeKind),
 }
 
-/// `pending` is the watch's pending notice (`Some(true)` opens Settings); `can_deliver`
-/// says the menu is closed, CCT is not closing, the shell accepts notifications and no
-/// fullscreen app covers the taskbar's monitor.
-fn notice_step(pending: Option<bool>, can_deliver: bool) -> NoticeStep {
+/// `pending` is the watch's pending notice; `can_deliver` says the menu is closed, CCT is
+/// not closing, the shell accepts notifications and no fullscreen app covers the taskbar's
+/// monitor.
+fn notice_step(pending: Option<PlacementNotice>, can_deliver: bool) -> NoticeStep {
     match pending {
         Some(_) if !can_deliver => NoticeStep::Wait,
-        Some(true) => NoticeStep::BalloonAndSettings,
-        Some(false) => NoticeStep::Balloon,
+        Some(n) if n.open_settings => NoticeStep::BalloonAndSettings(n.kind),
+        Some(n) => NoticeStep::Balloon(n.kind),
         None => NoticeStep::Wait,
     }
 }
 
-/// Tells the user once per run that the strip cannot sit next to the tray (#10), only while
-/// the failure is still settled. A runtime failure shows the balloon alone; clicking it opens
-/// Settings.
+/// Tells the user once per settled state that the strip moved to the other side or could
+/// not fit (#10), only while that state is still settled. Settings opens by itself only when
+/// the notice asks for it; clicking the balloon opens it too.
 fn deliver_placement_notice(hwnd: HWND) {
     let pending = with_app(|app| app.pending_placement_notice()).flatten();
     let can_deliver =
         pending.is_some() && may_raise() && notifications::placement_deliverable(hwnd);
-    let step = notice_step(pending, can_deliver);
-    if step == NoticeStep::Wait {
-        return;
-    }
+    let (kind, open_settings) = match notice_step(pending, can_deliver) {
+        NoticeStep::Wait => return,
+        NoticeStep::Balloon(kind) => (kind, false),
+        NoticeStep::BalloonAndSettings(kind) => (kind, true),
+    };
     with_app(|app| app.placement_notice_sent());
-    notifications::send_placement(hwnd);
-    if step == NoticeStep::BalloonAndSettings {
+    notifications::send_placement(hwnd, kind);
+    if open_settings {
         super::settings::open(hwnd);
     }
 }
@@ -639,12 +653,9 @@ pub fn run(app: App) -> i32 {
         let inbox = spawn_worker(hwnd, control);
         with_app(|app| app.set_inbox(inbox));
         render(hwnd);
-        // Left side: left-aligned icons leave no room, so the strip stays hidden: explain why.
-        // Right side: Settings opens with the placement notice once a startup failure
-        // settles (after the grace period, from the hardware timer).
-        if with_app(|app| app.left_side_blocked()) == Some(true) {
-            super::settings::open(hwnd);
-        }
+        // A side without room falls back to the other one; if neither has room, Settings
+        // opens with the placement notice once that settles (after the grace period, from
+        // the hardware timer).
         deliver_placement_notice(hwnd);
         // One-time opt-in invitation; the app is not borrowed while the modal box runs.
         if let Some((body, kinds)) = with_app(|app| app.keepalive_prompt()).flatten() {
@@ -718,15 +729,30 @@ mod tests {
 
     #[test]
     fn placement_notice_waits_until_it_can_be_delivered() {
+        let notice = |kind, open_settings| {
+            Some(PlacementNotice {
+                kind,
+                open_settings,
+            })
+        };
         assert_eq!(notice_step(None, true), NoticeStep::Wait);
         assert_eq!(notice_step(None, false), NoticeStep::Wait);
-        assert_eq!(notice_step(Some(true), false), NoticeStep::Wait);
-        assert_eq!(notice_step(Some(false), false), NoticeStep::Wait);
-        assert_eq!(
-            notice_step(Some(true), true),
-            NoticeStep::BalloonAndSettings
-        );
-        assert_eq!(notice_step(Some(false), true), NoticeStep::Balloon);
+        for kind in [
+            NoticeKind::MovedRight,
+            NoticeKind::MovedLeft,
+            NoticeKind::Hidden,
+        ] {
+            assert_eq!(notice_step(notice(kind, true), false), NoticeStep::Wait);
+            assert_eq!(notice_step(notice(kind, false), false), NoticeStep::Wait);
+            assert_eq!(
+                notice_step(notice(kind, true), true),
+                NoticeStep::BalloonAndSettings(kind)
+            );
+            assert_eq!(
+                notice_step(notice(kind, false), true),
+                NoticeStep::Balloon(kind)
+            );
+        }
     }
 
     #[test]

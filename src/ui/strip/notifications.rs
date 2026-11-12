@@ -7,6 +7,7 @@ use crate::ui::notifications::shell::{WindowsNotificationSink, decode_callback, 
 use crate::ui::notifications::{
     BalloonCommand, BalloonLife, NotificationSink, balloon_text, send_balloon,
 };
+use crate::ui::placement::NoticeKind;
 use std::cell::{Cell, RefCell};
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::UI::Shell::{
@@ -102,9 +103,18 @@ fn opens_settings(event: u32, id: u16, placement: Option<u16>) -> bool {
     event == NIN_BALLOONUSERCLICK && placement == Some(id)
 }
 
-/// Sends the one placement notice of this run (#10). Unlike limit notices it is not behind
-/// the near-limit opt-in; like them it is dropped over a fullscreen app or when CCT closes.
-pub(super) fn send_placement(hwnd: HWND) {
+/// The message for each placement notice; all share [`Key::NotifyPlacementTitle`].
+fn placement_body(kind: NoticeKind) -> Key {
+    match kind {
+        NoticeKind::MovedRight => Key::NotifyMovedRight,
+        NoticeKind::MovedLeft => Key::NotifyMovedLeft,
+        NoticeKind::Hidden => Key::NotifyPlacementBody,
+    }
+}
+
+/// Sends a placement notice (#10). Unlike limit notices it is not behind the near-limit
+/// opt-in; like them it is dropped over a fullscreen app or when CCT closes.
+pub(super) fn send_placement(hwnd: HWND, kind: NoticeKind) {
     if CLOSING.with(Cell::get) {
         return;
     }
@@ -121,7 +131,7 @@ pub(super) fn send_placement(hwnd: HWND) {
     }
     PLACEMENT.with(|p| p.set(Some(id)));
     let title = t(lang, Key::NotifyPlacementTitle);
-    let body = t(lang, Key::NotifyPlacementBody);
+    let body = t(lang, placement_body(kind));
     if !send_balloon(&shell, id, title, body, || current(hwnd, id)) {
         LIFE.with(|life| life.borrow_mut().finish(id));
     }
@@ -175,6 +185,16 @@ pub(super) fn handle(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> Op
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn each_placement_notice_has_its_own_body() {
+        assert_eq!(
+            placement_body(NoticeKind::MovedRight),
+            Key::NotifyMovedRight
+        );
+        assert_eq!(placement_body(NoticeKind::MovedLeft), Key::NotifyMovedLeft);
+        assert_eq!(placement_body(NoticeKind::Hidden), Key::NotifyPlacementBody);
+    }
 
     #[test]
     fn only_a_click_on_the_placement_balloon_opens_settings() {

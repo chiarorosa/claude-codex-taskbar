@@ -9,8 +9,10 @@ pub struct FrameKey {
     pub items: Vec<ItemView>,
     pub taskbar: Rect,
     pub dpi: u32,
-    /// Width the layout may use, in pixels.
+    /// Width the layout may use on the left side, in pixels.
     pub available: i32,
+    /// Width the layout may use next to the tray (0 when the edges were not read).
+    pub right_available: i32,
     /// The tray's left edge on the right side (#10), which the strip is flush with.
     pub tray_left: Option<i32>,
     pub light: bool,
@@ -63,6 +65,7 @@ mod tests {
             },
             dpi: 96,
             available: 700,
+            right_available: 0,
             tray_left: None,
             light: false,
         }
@@ -87,6 +90,10 @@ mod tests {
             },
             FrameKey {
                 available: 500,
+                ..key(10.0)
+            },
+            FrameKey {
+                right_available: 400,
                 ..key(10.0)
             },
             FrameKey {

@@ -295,8 +295,7 @@ mod tests {
 
 #[cfg(test)]
 mod live {
-    use crate::config::Placement;
-    use crate::ui::taskbar::{Side, query};
+    use crate::ui::taskbar::query;
 
     #[test]
     #[ignore = "reads the live taskbar"]
@@ -308,12 +307,11 @@ mod live {
                 windows::Win32::System::Com::COINIT_APARTMENTTHREADED,
             );
         }
-        let info = query(true, true, Placement::Right).expect("taskbar");
+        let info = query(true, true, true).expect("taskbar");
         println!(
             "rect={:?} windows_10={} apps_right={:?} tray_left={:?}",
             info.rect, info.windows_10, info.apps_right, info.tray_left
         );
-        assert_eq!(info.side, Side::Right);
         let apps_right = info.apps_right.expect("apps_right");
         let tray_left = info.tray_left.expect("tray_left");
         assert!(
@@ -323,19 +321,18 @@ mod live {
         assert!(apps_right < tray_left, "apps end before the tray");
         assert!(tray_left <= info.rect.right, "tray_left inside the taskbar");
         // A second (warm) read agrees with the first.
-        let again = query(true, true, Placement::Right).expect("taskbar");
+        let again = query(true, true, true).expect("taskbar");
         assert_eq!(again.apps_right, Some(apps_right));
         assert_eq!(again.tray_left, Some(tray_left));
         super::super::invalidate_edges();
-        let cold = query(true, true, Placement::Right).expect("taskbar");
+        let cold = query(true, true, true).expect("taskbar");
         assert_eq!(cold.apps_right, Some(apps_right));
     }
 
     #[test]
     #[ignore = "reads the live taskbar"]
-    fn left_side_reads_no_edges() {
-        let info = query(false, true, Placement::Left).expect("taskbar");
-        assert_eq!(info.side, Side::Left);
+    fn no_edges_unless_asked() {
+        let info = query(false, true, false).expect("taskbar");
         assert_eq!((info.apps_right, info.tray_left), (None, None));
     }
 }
