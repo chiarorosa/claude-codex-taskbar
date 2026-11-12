@@ -3,7 +3,7 @@
 use super::frame::{FrameCache, FrameKey};
 use super::layout::{Layout, layout};
 use super::notifications::{Notice, Notifications};
-use super::placement::{PlacementWatch, outcome_of};
+use super::placement::{LegacyWatch, legacy_outcome_of};
 use super::render::{GAP, Renderer, SEP_W, to_px};
 use super::strip;
 use super::taskbar::{
@@ -63,7 +63,7 @@ pub struct App {
     /// Right edge of the app buttons, for the right side (#10).
     apps_edge: AppsEdgeCache,
     /// Settled right-side placement failures, for one notice per run (#10).
-    placement: PlacementWatch,
+    placement: LegacyWatch,
     /// Monotonic clock for the placement watch.
     started: Instant,
     items: Vec<ItemView>,
@@ -153,7 +153,7 @@ impl App {
             taskbar: None,
             icons: IconCache::default(),
             apps_edge: AppsEdgeCache::default(),
-            placement: PlacementWatch::default(),
+            placement: LegacyWatch::default(),
             started: Instant::now(),
             items: Vec::new(),
             layout: None,
@@ -458,7 +458,7 @@ impl App {
         // (every item turned off) has nothing to place.
         if !covered
             && !self.items.is_empty()
-            && let Some(outcome) = outcome_of(info.side, &info, l.width)
+            && let Some(outcome) = legacy_outcome_of(info.side, &info, l.width)
         {
             self.placement
                 .observe(outcome, self.started.elapsed().as_secs());
