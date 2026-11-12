@@ -12,6 +12,7 @@ mod palette;
 
 use super::app::{claude_provider, codex_provider};
 use super::strip::{config_applied, with_app};
+use super::taskbar::Side;
 use super::view::setup_hints;
 use crate::autostart;
 use crate::config::Config;
@@ -23,7 +24,10 @@ use crate::limits::switcher::store::Store;
 use crate::model::ItemId;
 use crate::update::{self, Outcome};
 use layout::{Block, Ink, Page, Px, Row};
-use model::{Toggle, Tone, apply_labels, apply_numbers, apply_toggle, status_line};
+use model::{
+    Toggle, Tone, apply_labels, apply_numbers, apply_toggle, selected_side, status_line,
+    with_placement,
+};
 use paint::Painter;
 use palette::{Palette, palette, read_theme};
 use std::cell::RefCell;
@@ -47,19 +51,19 @@ use windows::Win32::UI::HiDpi::{
 use windows::Win32::UI::Input::KeyboardAndMouse::GetFocus;
 use windows::Win32::UI::Shell::ShellExecuteW;
 use windows::Win32::UI::WindowsAndMessaging::{
-    BM_GETCHECK, BM_SETCHECK, BN_CLICKED, BN_KILLFOCUS, BN_SETFOCUS, BS_AUTOCHECKBOX, BS_NOTIFY,
-    CreateWindowExW, DefWindowProcW, DestroyWindow, EN_KILLFOCUS, EN_SETFOCUS, ES_NUMBER,
-    GetClientRect, GetScrollInfo, GetSystemMetrics, GetWindowTextW, HMENU, IDC_ARROW,
-    IsDialogMessageW, LoadCursorW, MSG, MoveWindow, PostMessageW, RegisterClassExW, SB_BOTTOM,
-    SB_LINEDOWN, SB_LINEUP, SB_PAGEDOWN, SB_PAGEUP, SB_THUMBPOSITION, SB_THUMBTRACK, SB_TOP,
-    SB_VERT, SCROLLINFO, SIF_PAGE, SIF_POS, SIF_RANGE, SIF_TRACKPOS, SM_CXSCREEN, SM_CXVSCROLL,
-    SM_CYSCREEN, SW_SHOW, SW_SHOWNORMAL, SWP_NOACTIVATE, SWP_NOZORDER, SendMessageW,
+    BM_GETCHECK, BM_SETCHECK, BN_CLICKED, BN_KILLFOCUS, BN_SETFOCUS, BS_AUTOCHECKBOX,
+    BS_AUTORADIOBUTTON, BS_NOTIFY, CreateWindowExW, DefWindowProcW, DestroyWindow, EN_KILLFOCUS,
+    EN_SETFOCUS, ES_NUMBER, GetClientRect, GetScrollInfo, GetSystemMetrics, GetWindowTextW, HMENU,
+    IDC_ARROW, IsDialogMessageW, LoadCursorW, MSG, MoveWindow, PostMessageW, RegisterClassExW,
+    SB_BOTTOM, SB_LINEDOWN, SB_LINEUP, SB_PAGEDOWN, SB_PAGEUP, SB_THUMBPOSITION, SB_THUMBTRACK,
+    SB_TOP, SB_VERT, SCROLLINFO, SIF_PAGE, SIF_POS, SIF_RANGE, SIF_TRACKPOS, SM_CXSCREEN,
+    SM_CXVSCROLL, SM_CYSCREEN, SW_SHOW, SW_SHOWNORMAL, SWP_NOACTIVATE, SWP_NOZORDER, SendMessageW,
     SetForegroundWindow, SetWindowPos, SetWindowTextW, ShowWindow, UISF_HIDEFOCUS, WINDOW_EX_STYLE,
     WINDOW_STYLE, WM_APP, WM_CLOSE, WM_COMMAND, WM_CTLCOLOREDIT, WM_DESTROY, WM_DPICHANGED,
     WM_ERASEBKGND, WM_MOUSEWHEEL, WM_NOTIFY, WM_PAINT, WM_QUERYUISTATE, WM_SETFONT,
     WM_SETTINGCHANGE, WM_SIZE, WM_SYSCOLORCHANGE, WM_UPDATEUISTATE, WM_VSCROLL, WNDCLASSEXW,
-    WS_CAPTION, WS_CHILD, WS_CLIPCHILDREN, WS_EX_CONTROLPARENT, WS_OVERLAPPED, WS_SYSMENU,
-    WS_TABSTOP, WS_VISIBLE, WS_VSCROLL,
+    WS_CAPTION, WS_CHILD, WS_CLIPCHILDREN, WS_EX_CONTROLPARENT, WS_GROUP, WS_OVERLAPPED,
+    WS_SYSMENU, WS_TABSTOP, WS_VISIBLE, WS_VSCROLL,
 };
 use windows::core::{BOOL, PCWSTR, w};
 
@@ -71,6 +75,9 @@ const ID_LIMITS: usize = 11;
 const ID_CLAUDE_LABEL: usize = 12;
 const ID_CODEX_LABEL: usize = 13;
 const ID_UPDATE: usize = 14;
+/// The strip position radio buttons (#10).
+const ID_PLACE_LEFT: usize = 15;
+const ID_PLACE_RIGHT: usize = 16;
 /// Sent to the settings window when *Check for updates* has an answer; carries no data, the
 /// answer waits in `State::update_rx` (#117).
 pub const WM_APP_UPDATE_CHECKED: u32 = WM_APP + 6;
@@ -96,6 +103,13 @@ struct Check {
     hwnd: HWND,
 }
 
+/// One strip position option: a real radio button painted like a chip (#10).
+struct Radio {
+    id: usize,
+    label: String,
+    hwnd: HWND,
+}
+
 /// What the page shows that does not come from the controls.
 struct Facts {
     lang: Lang,
@@ -111,6 +125,8 @@ struct Facts {
     claude_label: String,
     /// *Check for updates*: not asked yet, asking, or the answer (#117).
     update: UpdateView,
+    /// The strip position the selector shows as picked (#10).
+    side: Side,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -125,6 +141,7 @@ struct State {
     parent: HWND,
     facts: Facts,
     checks: Vec<Check>,
+    radios: Vec<Radio>,
     /// Text fields as (id, control): the two intervals, then the two labels.
     edits: [(usize, HWND); 4],
     update_button: HWND,
@@ -383,6 +400,7 @@ fn blocks(facts: &Facts, checks: &[(Toggle, String, bool)]) -> Vec<Block> {
             indent: false,
             state_text: state(&Toggle::Autostart),
         },
+        placement_row(lang, facts.side),
         Row::Switch {
             id: id_of(&Toggle::ShowRemaining),
             title: t(lang, Key::ShowRemaining).to_string(),
@@ -412,6 +430,18 @@ fn blocks(facts: &Facts, checks: &[(Toggle, String, bool)]) -> Vec<Block> {
         update_row(lang, &facts.update),
     ]));
     out
+}
+
+/// The strip position selector: Left and Right, `side` picked (#10).
+fn placement_row(lang: Lang, side: Side) -> Row {
+    let option = |id, side_of, key| (id, t(lang, key).to_string(), side == side_of);
+    Row::Choice {
+        title: t(lang, Key::SettingsPlacement).to_string(),
+        options: vec![
+            option(ID_PLACE_LEFT, Side::Left, Key::PlacementLeft),
+            option(ID_PLACE_RIGHT, Side::Right, Key::PlacementRight),
+        ],
+    }
 }
 
 /// The version row: the running version, the last answer, and the button (#117).
@@ -613,6 +643,11 @@ fn place_children() {
         if let Some(r) = rect_of(ID_UPDATE) {
             moves.push((s.update_button, r));
         }
+        moves.extend(
+            s.radios
+                .iter()
+                .filter_map(|radio| rect_of(radio.id).map(|r| (radio.hwnd, r))),
+        );
         let inset = (8.0 * scale).round() as i32;
         let line = (18.0 * scale).round() as i32;
         for (id, edit) in s.edits {
@@ -773,6 +808,7 @@ fn redraw_children() {
             .map(|c| c.hwnd)
             .chain(s.edits.map(|(_, e)| e))
             .chain(std::iter::once(s.update_button))
+            .chain(s.radios.iter().map(|r| r.hwnd))
             .collect()
     })
     .unwrap_or_default();
@@ -837,6 +873,22 @@ fn apply_check(index: usize) {
             autostart::disable()
         };
     }
+}
+
+/// A strip position was picked: save it as an explicit choice, move the strip at once, and
+/// show the setup hints for where it now sits (#10).
+fn placement_clicked(side: Side) {
+    let Some(parent) = with_state_mut(|s| {
+        s.facts.side = side;
+        s.parent
+    }) else {
+        return;
+    };
+    commit(parent, |base| with_placement(base, side));
+    if let Some(hints) = with_app(|app| setup_hints(app.taskbar_hints())) {
+        with_state_mut(|s| s.facts.hints = hints);
+    }
+    relayout();
 }
 
 /// Applies the interval and label fields and shows the values the config actually took.
@@ -937,6 +989,7 @@ pub fn open(parent: HWND) {
         claude_slot: super::switcher_ui::live_slot(),
         claude_label: super::switcher_ui::live_claude_label(&cfg.claude_label),
         update: UpdateView::Idle,
+        side: selected_side(cfg.placement),
     };
     let monitor = monitor.map(|m| Px {
         x: m.left,
@@ -1031,6 +1084,52 @@ fn create(parent: HWND, cfg: &Config, disks: &[DiskReading], facts: Facts, monit
                 hwnd: child,
             });
         }
+        // One group of auto radio buttons: Windows unchecks the other side, the arrow keys move
+        // between them, and UI Automation sees a radio group. Each field starts a new group,
+        // which ends this one.
+        let mut radios = Vec::new();
+        for (id, side, key) in [
+            (ID_PLACE_LEFT, Side::Left, Key::PlacementLeft),
+            (ID_PLACE_RIGHT, Side::Right, Key::PlacementRight),
+        ] {
+            let label = t(facts.lang, key).to_string();
+            let text = wide_z(&label);
+            let first = if id == ID_PLACE_LEFT {
+                WS_GROUP | WS_TABSTOP
+            } else {
+                WINDOW_STYLE(0)
+            };
+            let style = WS_CHILD
+                | WS_VISIBLE
+                | first
+                | WINDOW_STYLE((BS_AUTORADIOBUTTON | BS_NOTIFY) as u32);
+            let child = CreateWindowExW(
+                Default::default(),
+                w!("BUTTON"),
+                PCWSTR(text.as_ptr()),
+                style,
+                0,
+                0,
+                1,
+                1,
+                Some(hwnd),
+                Some(HMENU(id as _)),
+                None,
+                None,
+            )
+            .unwrap_or_default();
+            let state = if side == facts.side {
+                BST_CHECKED
+            } else {
+                BST_UNCHECKED
+            };
+            SendMessageW(child, BM_SETCHECK, Some(WPARAM(state.0 as usize)), None);
+            radios.push(Radio {
+                id,
+                label,
+                hwnd: child,
+            });
+        }
         let edit = |id: usize, text: &str, number: bool| {
             let text = wide_z(text);
             let style = if number { ES_NUMBER as u32 } else { 0 };
@@ -1038,7 +1137,7 @@ fn create(parent: HWND, cfg: &Config, disks: &[DiskReading], facts: Facts, monit
                 Default::default(),
                 w!("EDIT"),
                 PCWSTR(text.as_ptr()),
-                WS_CHILD | WS_VISIBLE | WS_TABSTOP | WINDOW_STYLE(style),
+                WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_GROUP | WINDOW_STYLE(style),
                 0,
                 0,
                 1,
@@ -1099,6 +1198,7 @@ fn create(parent: HWND, cfg: &Config, disks: &[DiskReading], facts: Facts, monit
                 parent,
                 facts,
                 checks,
+                radios,
                 edits,
                 update_button,
                 update_rx: None,
@@ -1136,6 +1236,11 @@ fn custom_draw(cd: &NMCUSTOMDRAW) -> Option<LRESULT> {
             let _ = s.painter.chip(cd.hdc, r, &update_label(s), false, &s.pal);
             return Some(LRESULT(CDRF_SKIPDEFAULT as isize));
         }
+        if let Some(radio) = s.radios.iter().find(|r| r.hwnd == cd.hdr.hwndFrom) {
+            let on = is_checked(radio.hwnd);
+            let _ = s.painter.chip(cd.hdc, r, &radio.label, on, &s.pal);
+            return Some(LRESULT(CDRF_SKIPDEFAULT as isize));
+        }
         let check = s.checks.iter().find(|c| c.hwnd == cd.hdr.hwndFrom)?;
         let on = is_checked(check.hwnd);
         let _ = match check.look {
@@ -1162,6 +1267,8 @@ fn focus_ring(s: &State, page: &Page) -> Option<Px> {
     }
     let id = if focus == s.update_button {
         ID_UPDATE
+    } else if let Some(radio) = s.radios.iter().find(|r| r.hwnd == focus) {
+        radio.id
     } else {
         ID_CHECK + s.checks.iter().position(|c| c.hwnd == focus)?
     };
@@ -1269,6 +1376,13 @@ extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM)
                     invalidate(hwnd);
                 }
                 (ID_UPDATE, BN_KILLFOCUS) => invalidate(hwnd),
+                (ID_PLACE_LEFT, BN_CLICKED) => placement_clicked(Side::Left),
+                (ID_PLACE_RIGHT, BN_CLICKED) => placement_clicked(Side::Right),
+                (ID_PLACE_LEFT | ID_PLACE_RIGHT, BN_SETFOCUS) => {
+                    reveal_control(id);
+                    invalidate(hwnd);
+                }
+                (ID_PLACE_LEFT | ID_PLACE_RIGHT, BN_KILLFOCUS) => invalidate(hwnd),
                 (i, BN_CLICKED) if i >= ID_CHECK => {
                     apply_check(i - ID_CHECK);
                     relayout();
@@ -1441,8 +1555,54 @@ mod tests {
     }
 
     #[test]
-    fn the_general_card_ends_with_the_version_row() {
-        let facts = Facts {
+    fn the_placement_row_names_both_sides_in_every_language() {
+        let options = |lang, side| match placement_row(lang, side) {
+            Row::Choice { title, options } => (title, options),
+            other => panic!("{other:?}"),
+        };
+        assert_eq!(
+            options(Lang::En, Side::Left),
+            (
+                "Strip position".into(),
+                vec![
+                    (ID_PLACE_LEFT, "Left".into(), true),
+                    (ID_PLACE_RIGHT, "Right".into(), false)
+                ]
+            )
+        );
+        assert_eq!(
+            options(Lang::PtBr, Side::Right),
+            (
+                "Posição da faixa".into(),
+                vec![
+                    (ID_PLACE_LEFT, "Esquerda".into(), false),
+                    (ID_PLACE_RIGHT, "Direita".into(), true)
+                ]
+            )
+        );
+        let (title, opts) = options(Lang::Es, Side::Left);
+        assert_eq!(title, "Posición de la franja");
+        assert_eq!(
+            (opts[0].1.as_str(), opts[1].1.as_str()),
+            ("Izquierda", "Derecha")
+        );
+    }
+
+    #[test]
+    fn the_placement_row_follows_start_with_windows() {
+        let model = blocks(&sample_facts(), &[]);
+        let Some(Block::Card(rows)) = model.last() else {
+            panic!("{model:?}");
+        };
+        let Row::Switch { title, .. } = &rows[0] else {
+            panic!("{rows:?}");
+        };
+        assert_eq!(title, "Start with Windows");
+        assert!(matches!(&rows[1], Row::Choice { .. }));
+    }
+
+    fn sample_facts() -> Facts {
+        Facts {
             lang: Lang::En,
             hints: Vec::new(),
             claude_login: true,
@@ -1451,8 +1611,13 @@ mod tests {
             claude_slot: None,
             claude_label: "P".into(),
             update: UpdateView::Idle,
-        };
-        let model = blocks(&facts, &[]);
+            side: Side::Left,
+        }
+    }
+
+    #[test]
+    fn the_general_card_ends_with_the_version_row() {
+        let model = blocks(&sample_facts(), &[]);
         let Some(Block::Card(rows)) = model.last() else {
             panic!("{model:?}");
         };

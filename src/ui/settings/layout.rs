@@ -72,6 +72,12 @@ pub enum Row {
         sub: Option<(String, Ink)>,
         label: String,
     },
+    /// One pick among a few options, drawn like chips on the right: (id, label, selected).
+    /// The options are real radio buttons (#10).
+    Choice {
+        title: String,
+        options: Vec<(usize, String, bool)>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -203,6 +209,28 @@ impl Out<'_> {
                 let row_h = self.text_row(title, sub, left, control_x - GAP, top, h);
                 let rect = self.px(control_x, top + (row_h - h) / 2.0, w, h);
                 self.page.controls.push((*id, rect));
+                row_h
+            }
+            Row::Choice { title, options } => {
+                let sizes: Vec<(f32, f32)> = options
+                    .iter()
+                    .map(|(_, text, _)| {
+                        let line = self.m.height(text, TextRole::Body, f32::MAX);
+                        let w = self.m.width(text, TextRole::Body) + 2.0 * CHIP_PAD_X;
+                        (w, line + 2.0 * CHIP_PAD_Y)
+                    })
+                    .collect();
+                let total = sizes.iter().map(|(w, _)| w).sum::<f32>()
+                    + CHIP_GAP * sizes.len().saturating_sub(1) as f32;
+                let h = sizes.iter().map(|(_, h)| *h).fold(0.0, f32::max);
+                let mut x = right - total;
+                let row_h = self.text_row(title, None, left, x - GAP, top, h);
+                let y = top + (row_h - h) / 2.0;
+                for ((id, _, _), (w, oh)) in options.iter().zip(&sizes) {
+                    let rect = self.px(x, y + (h - oh) / 2.0, *w, *oh);
+                    self.page.controls.push((*id, rect));
+                    x += w + CHIP_GAP;
+                }
                 row_h
             }
             Row::Chips { label, chips } => {
@@ -458,6 +486,28 @@ mod tests {
         let title = p.texts.iter().find(|t| t.text == "Version 0.4.3").unwrap();
         let sub = p.texts.iter().find(|t| t.ink == Ink::Success).unwrap();
         assert!(title.rect.x + title.rect.w <= b.x && sub.rect.y > title.rect.y);
+    }
+
+    #[test]
+    fn choice_row_sits_right_like_chips() {
+        let row = Row::Choice {
+            title: "Strip position".into(),
+            options: vec![(15, "Left".into(), true), (16, "Right".into(), false)],
+        };
+        let p = layout("T", &[Block::Card(vec![row])], 1.0, &Fake);
+        let card = p.cards[0];
+        let (left_id, l) = p.controls[0];
+        let (right_id, r) = p.controls[1];
+        assert_eq!((left_id, right_id), (15, 16));
+        // Chip tokens: 11 × 4 padding around one body line, 6 between options.
+        assert_eq!((l.w, l.h), (4 * 7 + 22, 18 + 8));
+        assert_eq!((r.w, r.h), (5 * 7 + 22, 18 + 8));
+        assert_eq!(r.x + r.w, card.x + card.w - 14, "right-aligned in the row");
+        assert_eq!(l.x + l.w + 6, r.x);
+        assert_eq!(l.y, r.y);
+        assert!(r.y >= card.y && r.y + r.h <= card.y + card.h);
+        let title = p.texts.iter().find(|t| t.text == "Strip position").unwrap();
+        assert!(title.rect.x + title.rect.w <= l.x);
     }
 
     #[test]

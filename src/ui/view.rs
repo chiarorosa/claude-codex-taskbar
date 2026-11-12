@@ -34,10 +34,10 @@ pub struct ItemView {
 /// Taskbar facts that decide which setup hints apply.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct TaskbarHints {
-    pub left_aligned: bool,
     pub widgets_button_on: bool,
     pub windows_10: bool,
-    /// Where the strip sits; next to the tray it needs no setup hints.
+    /// Where the strip is drawn (the preferred side while it is hidden); next to the tray it
+    /// needs no setup hints.
     pub side: Side,
 }
 
@@ -416,22 +416,15 @@ pub fn tooltip_text(
     out
 }
 
-/// Taskbar settings the user should change for the strip to show up well.
-/// Windows 10 has no centered taskbar and no Widgets button, so it gets no hints.
+/// Taskbar settings the user should change for the strip to show up well. Only the Widgets
+/// button, which takes the left corner on Windows 11; left-aligned icons need no hint since
+/// the strip then moves next to the tray. Windows 10 has no Widgets button.
 pub fn setup_hints(hints: TaskbarHints) -> Vec<Key> {
-    if hints.side == Side::Right {
-        return Vec::new();
+    if hints.side == Side::Left && !hints.windows_10 && hints.widgets_button_on {
+        vec![Key::HintWidgetsButton]
+    } else {
+        Vec::new()
     }
-    if hints.windows_10 {
-        return Vec::new();
-    }
-    [
-        (hints.left_aligned, Key::HintCenterTaskbar),
-        (hints.widgets_button_on, Key::HintWidgetsButton),
-    ]
-    .into_iter()
-    .filter_map(|(on, key)| on.then_some(key))
-    .collect()
 }
 
 #[cfg(test)]
@@ -893,7 +886,6 @@ mod tests {
             &ProviderStatus::Disabled,
             &hidden,
             TaskbarHints {
-                left_aligned: true,
                 widgets_button_on: true,
                 ..Default::default()
             },
@@ -903,7 +895,6 @@ mod tests {
         assert!(!tip.contains("Claude"));
         assert!(tip.contains("Not shown (no room):"));
         assert!(tip.contains("GPU 12%"));
-        assert!(tip.contains("Center the taskbar icons"));
         assert!(tip.contains("Turn off the Windows Widgets button"));
     }
 
@@ -1040,8 +1031,7 @@ mod hint_tests {
     fn right_side_has_no_setup_hints() {
         assert_eq!(
             setup_hints(TaskbarHints {
-                left_aligned: true,
-                windows_10: true,
+                windows_10: false,
                 widgets_button_on: true,
                 side: Side::Right,
             }),
@@ -1050,31 +1040,14 @@ mod hint_tests {
     }
 
     #[test]
-    fn hints_follow_taskbar_state() {
+    fn only_the_widgets_hint_and_only_on_the_left_of_windows_11() {
         assert_eq!(setup_hints(TaskbarHints::default()), Vec::<Key>::new());
         assert_eq!(
             setup_hints(TaskbarHints {
-                left_aligned: true,
-                ..Default::default()
-            }),
-            [Key::HintCenterTaskbar]
-        );
-        assert_eq!(
-            setup_hints(TaskbarHints {
-                left_aligned: true,
                 widgets_button_on: true,
                 ..Default::default()
             }),
-            [Key::HintCenterTaskbar, Key::HintWidgetsButton]
-        );
-        assert_eq!(
-            setup_hints(TaskbarHints {
-                left_aligned: true,
-                windows_10: true,
-                ..Default::default()
-            }),
-            Vec::<Key>::new(),
-            "Windows 10 gets no centering or Widgets hints"
+            [Key::HintWidgetsButton]
         );
         assert_eq!(
             setup_hints(TaskbarHints {

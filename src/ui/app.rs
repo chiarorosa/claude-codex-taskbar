@@ -395,11 +395,6 @@ impl App {
         self.placement.restart(self.started.elapsed().as_secs());
     }
 
-    /// Whether the strip has settled as having no room on either side.
-    pub fn placement_failed(&self) -> bool {
-        self.placement.hidden_settled()
-    }
-
     /// Recomputes position and layout from a fresh taskbar query, then paints or hides.
     /// The query runs outside the `App` borrow because UI Automation can pump messages.
     /// `with_edges` says the query was asked for the right-side edges, `looked_up_apps` that
@@ -571,7 +566,6 @@ impl App {
     pub fn taskbar_hints(&self) -> TaskbarHints {
         match &self.taskbar {
             Some(t) => TaskbarHints {
-                left_aligned: t.left_aligned,
                 widgets_button_on: t.widgets_button_on,
                 windows_10: t.windows_10,
                 side: t.side,

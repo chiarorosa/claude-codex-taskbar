@@ -1,9 +1,10 @@
 //! What the Settings window edits: its toggles, turning them into a `Config`, and the login
 //! status lines. Pure; the window owns the controls.
 
-use crate::config::Config;
+use crate::config::{Config, Placement};
 use crate::i18n::Key;
 use crate::model::ItemId;
+use crate::ui::taskbar::Side;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Toggle {
@@ -68,6 +69,28 @@ pub fn apply_labels(base: &Config, claude: &str, codex: &str, claude_saved: bool
     }
     cfg.codex_label = codex.to_string();
     cfg.clamped()
+}
+
+/// The config after a pick in the strip position selector: always an explicit side, so the
+/// fallback notices apply from then on (#10).
+pub fn with_placement(cfg: &Config, side: Side) -> Config {
+    let placement = match side {
+        Side::Left => Placement::Left,
+        Side::Right => Placement::Right,
+    };
+    Config {
+        placement,
+        ..cfg.clone()
+    }
+}
+
+/// The option the selector shows as picked: Right only when chosen, so `Auto` shows Left.
+pub fn selected_side(placement: Placement) -> Side {
+    if placement == Placement::Right {
+        Side::Right
+    } else {
+        Side::Left
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -218,6 +241,38 @@ mod tests {
             (cfg.claude_label.as_str(), cfg.codex_label.as_str()),
             ("P", "C")
         );
+    }
+
+    #[test]
+    fn selector_writes_explicit_placement() {
+        let base = Config {
+            hw_interval_secs: 3,
+            ..Config::default()
+        };
+        assert_eq!(base.placement, Placement::Auto);
+        let left = with_placement(&base, Side::Left);
+        assert_eq!(
+            left,
+            Config {
+                placement: Placement::Left,
+                ..base.clone()
+            }
+        );
+        let right = with_placement(&left, Side::Right);
+        assert_eq!(
+            right,
+            Config {
+                placement: Placement::Right,
+                ..base.clone()
+            }
+        );
+    }
+
+    #[test]
+    fn auto_shows_left_selected() {
+        assert_eq!(selected_side(Placement::Auto), Side::Left);
+        assert_eq!(selected_side(Placement::Left), Side::Left);
+        assert_eq!(selected_side(Placement::Right), Side::Right);
     }
 
     #[test]
