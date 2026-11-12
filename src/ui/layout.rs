@@ -15,8 +15,11 @@ pub struct Layout {
     pub visible: Vec<usize>,
     /// Input index of the last hardware item, when limit items follow it.
     pub separator_after: Option<usize>,
-    /// Items were dropped; an ellipsis is drawn after the last visible one.
+    /// Items were dropped.
     pub overflow: bool,
+    /// Position in `visible` before which the ellipsis is drawn, where the dropped items
+    /// were: after the visible hardware while only hardware is hidden, else at the end.
+    pub ellipsis_at: Option<usize>,
     pub width: i32,
 }
 
@@ -71,15 +74,27 @@ pub fn layout(
             visible,
             separator_after,
             overflow: false,
+            ellipsis_at: None,
             width,
         };
     }
+    let mut limits_dropped = false;
     for dropped in drop_order(items).into_iter().take(n.saturating_sub(1)) {
+        limits_dropped |= items[dropped].0 != Kind::Hardware;
         visible.retain(|&i| i != dropped);
         let (width, separator_after) = measure(items, &visible, gap, sep_w);
         let width = width + gap + ellipsis_w;
         if width <= available {
+            let shown_hw = visible
+                .iter()
+                .filter(|&&i| items[i].0 == Kind::Hardware)
+                .count();
             return Layout {
+                ellipsis_at: Some(if limits_dropped {
+                    visible.len()
+                } else {
+                    shown_hw
+                }),
                 visible,
                 separator_after,
                 overflow: true,
@@ -91,6 +106,7 @@ pub fn layout(
         visible: Vec::new(),
         separator_after: None,
         overflow: n > 0,
+        ellipsis_at: None,
         width: 0,
     }
 }
@@ -143,6 +159,18 @@ mod tests {
         assert!(l.overflow);
         assert_eq!(l.separator_after, None);
         assert_eq!(l.width, 72);
+    }
+
+    #[test]
+    fn ellipsis_sits_where_items_were_dropped() {
+        // Hidden hardware: right after the visible hardware, before the separator.
+        assert_eq!(layout(&items(), 250, GAP, SEP, ELL).ellipsis_at, Some(2));
+        // All hardware hidden, limits whole: in front of the limits.
+        assert_eq!(layout(&items(), 150, GAP, SEP, ELL).ellipsis_at, Some(0));
+        // Limits hidden too: at the end.
+        assert_eq!(layout(&items(), 80, GAP, SEP, ELL).ellipsis_at, Some(1));
+        // Nothing hidden: no ellipsis.
+        assert_eq!(layout(&items(), 300, GAP, SEP, ELL).ellipsis_at, None);
     }
 
     #[test]

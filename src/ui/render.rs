@@ -349,14 +349,9 @@ impl Renderer {
         light: bool,
     ) -> Result<()> {
         let Surface {
-            w,
-            h,
-            dpi,
-            rt,
-            brush,
-            ..
+            h, dpi, rt, brush, ..
         } = surface;
-        let (w, h, dpi) = (*w, *h, *dpi);
+        let (h, dpi) = (*h, *dpi);
         let palette = if light { &LIGHT } else { &DARK };
         // SAFETY: the render target is bound to the surface's DC for its whole life.
         unsafe {
@@ -368,6 +363,29 @@ impl Renderer {
             let block_h = LABEL_LINE + VALUE_LINE + BAR_GAP + BAR_H;
             let top = ((h_dip - block_h) / 2.0).max(0.0);
             let mut x = 0.0f32;
+            // The ellipsis sits where items were dropped (`Layout::ellipsis_at`).
+            let ellipsis_w = self.text_width(ELLIPSIS, &self.value_fmt);
+            let draw_ellipsis = |x: f32| {
+                set(palette.value, 1.0);
+                let r = D2D_RECT_F {
+                    left: x,
+                    top: 0.0,
+                    right: x + ellipsis_w,
+                    bottom: h_dip,
+                };
+                rt.DrawText(
+                    &wide(ELLIPSIS),
+                    &self.value_fmt,
+                    &r,
+                    brush,
+                    D2D1_DRAW_TEXT_OPTIONS_NONE,
+                    DWRITE_MEASURING_MODE_NATURAL,
+                );
+                x + ellipsis_w
+            };
+            if layout.ellipsis_at == Some(0) && !layout.visible.is_empty() {
+                x = draw_ellipsis(x) + GAP;
+            }
             for (n, &i) in layout.visible.iter().enumerate() {
                 if n > 0 {
                     x += GAP;
@@ -468,6 +486,9 @@ impl Renderer {
                     );
                 }
                 x += col_w;
+                if layout.ellipsis_at == Some(n + 1) {
+                    x = draw_ellipsis(x + GAP);
+                }
                 if layout.separator_after == Some(i) {
                     x += GAP;
                     set(palette.separator, 1.0);
@@ -483,24 +504,6 @@ impl Renderer {
                     );
                     x += SEP_W;
                 }
-            }
-            if layout.overflow && !layout.visible.is_empty() {
-                x += GAP;
-                set(palette.value, 1.0);
-                let r = D2D_RECT_F {
-                    left: x,
-                    top: 0.0,
-                    right: to_dip(w, dpi),
-                    bottom: h_dip,
-                };
-                rt.DrawText(
-                    &wide(ELLIPSIS),
-                    &self.value_fmt,
-                    &r,
-                    brush,
-                    D2D1_DRAW_TEXT_OPTIONS_NONE,
-                    DWRITE_MEASURING_MODE_NATURAL,
-                );
             }
             rt.EndDraw(None, None)
         }
