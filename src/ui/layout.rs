@@ -29,24 +29,28 @@ pub struct Layout {
     pub width: i32,
 }
 
+/// Width of the `shown` items (input indices, in display order) and the separator position.
 fn measure(
     items: &[(Kind, ItemMetrics)],
-    count: usize,
+    shown: &[usize],
     mode: Mode,
     gap: i32,
     sep_w: i32,
 ) -> (i32, Option<usize>) {
-    let shown = &items[..count];
     let mut width: i32 = shown
         .iter()
-        .map(|(_, m)| match mode {
-            Mode::Full => m.full_w,
-            Mode::Compact => m.compact_w,
+        .map(|&i| match mode {
+            Mode::Full => items[i].1.full_w,
+            Mode::Compact => items[i].1.compact_w,
         })
         .sum();
-    width += gap * (count as i32 - 1).max(0);
-    let last_hw = shown.iter().rposition(|(k, _)| *k == Kind::Hardware);
-    let has_limits = shown.iter().any(|(k, _)| *k != Kind::Hardware);
+    width += gap * (shown.len() as i32 - 1).max(0);
+    let last_hw = shown
+        .iter()
+        .rev()
+        .copied()
+        .find(|&i| items[i].0 == Kind::Hardware);
+    let has_limits = shown.iter().any(|&i| items[i].0 != Kind::Hardware);
     let separator_after = last_hw.filter(|_| has_limits);
     if separator_after.is_some() {
         width += sep_w + gap;
@@ -54,8 +58,20 @@ fn measure(
     (width, separator_after)
 }
 
-/// Full with everything, else Compact with everything, else Compact dropping items from
-/// the end with an ellipsis. Returns width 0 when nothing fits.
+/// Order in which items are dropped when space runs out: hardware first (from its last
+/// item), then the limits from the end. Usage limits are the reason CCT exists.
+fn drop_order(items: &[(Kind, ItemMetrics)]) -> Vec<usize> {
+    let (hardware, limits): (Vec<usize>, Vec<usize>) =
+        (0..items.len()).partition(|&i| items[i].0 == Kind::Hardware);
+    hardware
+        .into_iter()
+        .rev()
+        .chain(limits.into_iter().rev())
+        .collect()
+}
+
+/// Full with everything, else Compact with everything, else Compact dropping items
+/// (hardware first, see [`drop_order`]) with an ellipsis. Returns width 0 when nothing fits.
 pub fn layout(
     items: &[(Kind, ItemMetrics)],
     available: i32,
@@ -64,25 +80,28 @@ pub fn layout(
     ellipsis_w: i32,
 ) -> Layout {
     let n = items.len();
+    let all: Vec<usize> = (0..n).collect();
     for mode in [Mode::Full, Mode::Compact] {
-        let (width, separator_after) = measure(items, n, mode, gap, sep_w);
+        let (width, separator_after) = measure(items, &all, mode, gap, sep_w);
         if width <= available {
             return Layout {
                 mode,
-                visible: (0..n).collect(),
+                visible: all,
                 separator_after,
                 overflow: false,
                 width,
             };
         }
     }
-    for count in (1..n).rev() {
-        let (width, separator_after) = measure(items, count, Mode::Compact, gap, sep_w);
+    let mut visible = all;
+    for dropped in drop_order(items).into_iter().take(n.saturating_sub(1)) {
+        visible.retain(|&i| i != dropped);
+        let (width, separator_after) = measure(items, &visible, Mode::Compact, gap, sep_w);
         let width = width + gap + ellipsis_w;
         if width <= available {
             return Layout {
                 mode: Mode::Compact,
-                visible: (0..count).collect(),
+                visible,
                 separator_after,
                 overflow: true,
                 width,
@@ -145,14 +164,23 @@ mod tests {
     }
 
     #[test]
-    fn drops_from_end_with_ellipsis() {
+    fn drops_hardware_before_limits() {
+        // Hardware goes first, from its last item: quotas are why CCT exists.
         let l = layout(&items(), 150, GAP, SEP, ELL);
         assert_eq!(l.mode, Mode::Compact);
-        assert_eq!(l.visible, vec![0, 1, 2]);
+        assert_eq!(l.visible, vec![0, 3, 4]);
+        assert!(l.overflow);
+        assert_eq!(l.separator_after, Some(0));
+        assert_eq!(l.width, 143);
+    }
+
+    #[test]
+    fn drops_limits_from_end_once_hardware_is_gone() {
+        let l = layout(&items(), 75, GAP, SEP, ELL);
+        assert_eq!(l.visible, vec![3]);
         assert!(l.overflow);
         assert_eq!(l.separator_after, None);
-        assert_eq!(l.width, 132);
-        assert!(l.width <= 150);
+        assert_eq!(l.width, 52);
     }
 
     #[test]
