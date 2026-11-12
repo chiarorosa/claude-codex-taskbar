@@ -87,7 +87,6 @@ pub enum Key {
     UpdateFailedFmt,
     HintCenterTaskbar,
     HintWidgetsButton,
-    HintWindows10,
     HiddenItems,
     LoginFoundStatus,
     SettingsPageTitle,
@@ -188,7 +187,6 @@ impl Key {
         Key::UpdateFailedFmt,
         Key::HintCenterTaskbar,
         Key::HintWidgetsButton,
-        Key::HintWindows10,
         Key::HiddenItems,
         Key::LoginFoundStatus,
         Key::SettingsPageTitle,
@@ -371,11 +369,6 @@ fn strings(key: Key) -> [&'static str; Lang::ALL.len()] {
             "Turn off the Windows Widgets button to free this corner (Settings → Personalization → Taskbar → Widgets)",
             "Desative o botão de Widgets do Windows para liberar este canto (Configurações → Personalização → Barra de tarefas → Widgets)",
             "Desactiva el botón de Widgets de Windows para liberar esta esquina (Configuración → Personalización → Barra de tareas → Widgets)",
-        ],
-        Key::HintWindows10 => [
-            "On Windows 10 the taskbar icons start at the left edge, so there is no free corner for the strip yet. This may change in a future version.",
-            "No Windows 10, os ícones da barra de tarefas começam na borda esquerda, então ainda não há um canto livre para a faixa. Isso pode mudar em uma versão futura.",
-            "En Windows 10, los iconos de la barra de tareas empiezan en el borde izquierdo, así que todavía no hay una esquina libre para la franja. Esto puede cambiar en una versión futura.",
         ],
         Key::HiddenItems => [
             "Not shown (no room):",
