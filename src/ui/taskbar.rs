@@ -251,14 +251,49 @@ pub enum Side {
     Right,
 }
 
-/// Resolves the configured placement: automatic keeps the strip clear of the icons, so it
-/// goes right on Windows 10 and with left-aligned icons, left otherwise.
-pub fn resolve_side(placement: Placement, windows_10: bool, left_aligned: bool) -> Side {
+/// Sides to try, most preferred first. `Auto` behaves like `Left`.
+pub fn side_order(placement: Placement) -> [Side; 2] {
     match placement {
-        Placement::Left => Side::Left,
-        Placement::Right => Side::Right,
-        Placement::Auto if windows_10 || left_aligned => Side::Right,
-        Placement::Auto => Side::Left,
+        Placement::Auto | Placement::Left => [Side::Left, Side::Right],
+        Placement::Right => [Side::Right, Side::Left],
+    }
+}
+
+/// Whether the user picked a side by hand (everything except `Auto`).
+pub fn is_explicit(placement: Placement) -> bool {
+    placement != Placement::Auto
+}
+
+/// Where the strip ended up for a given preference order.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Placed {
+    /// The first side in the order has room.
+    Preferred(Side),
+    /// Only the second side has room.
+    Fallback(Side),
+    /// Neither side has room.
+    Hidden,
+}
+
+/// Picks the first side in `order` for which `fits` holds.
+pub fn place(order: [Side; 2], fits: impl Fn(Side) -> bool) -> Placed {
+    if fits(order[0]) {
+        Placed::Preferred(order[0])
+    } else if fits(order[1]) {
+        Placed::Fallback(order[1])
+    } else {
+        Placed::Hidden
+    }
+}
+
+/// Side used by [`query`] until it takes the resolved side from the caller: the first
+/// preferred side, except that `Auto` keeps the strip clear of the icons, so it goes right
+/// on Windows 10 and with left-aligned icons.
+fn query_side(placement: Placement, windows_10: bool, left_aligned: bool) -> Side {
+    if placement == Placement::Auto && (windows_10 || left_aligned) {
+        Side::Right
+    } else {
+        side_order(placement)[0]
     }
 }
 
@@ -426,7 +461,7 @@ pub fn query(with_icons: bool, with_apps: bool, placement: Placement) -> Option<
     let overlap = rect.bottom.min(monitor.bottom) - rect.top.max(monitor.top);
     let windows_10 = is_windows_10(build);
     let left_aligned = icons_left_aligned(build, reg_dword(ADVANCED_KEY, "TaskbarAl"));
-    let side = resolve_side(placement, windows_10, left_aligned);
+    let side = query_side(placement, windows_10, left_aligned);
     let (apps_right, tray_left) = if reads_edges(side, rect) {
         (
             with_apps
@@ -463,13 +498,33 @@ mod tests {
     use super::*;
 
     #[test]
-    fn resolve_side_table() {
-        use Placement::*;
-        assert_eq!(resolve_side(Auto, true, false), Side::Right);
-        assert_eq!(resolve_side(Auto, false, true), Side::Right);
-        assert_eq!(resolve_side(Auto, false, false), Side::Left);
-        assert_eq!(resolve_side(Left, true, true), Side::Left);
-        assert_eq!(resolve_side(Right, false, false), Side::Right);
+    fn side_order_table() {
+        assert_eq!(side_order(Placement::Auto), [Side::Left, Side::Right]);
+        assert_eq!(side_order(Placement::Left), [Side::Left, Side::Right]);
+        assert_eq!(side_order(Placement::Right), [Side::Right, Side::Left]);
+    }
+
+    #[test]
+    fn auto_is_not_explicit() {
+        assert!(!is_explicit(Placement::Auto));
+        assert!(is_explicit(Placement::Left));
+        assert!(is_explicit(Placement::Right));
+    }
+
+    #[test]
+    fn place_table() {
+        use Side::{Left, Right};
+        let lr = [Left, Right];
+        let rl = [Right, Left];
+        let fits = |l: bool, r: bool| move |s: Side| if s == Left { l } else { r };
+        assert_eq!(place(lr, fits(true, true)), Placed::Preferred(Left));
+        assert_eq!(place(lr, fits(true, false)), Placed::Preferred(Left));
+        assert_eq!(place(lr, fits(false, true)), Placed::Fallback(Right));
+        assert_eq!(place(lr, fits(false, false)), Placed::Hidden);
+        assert_eq!(place(rl, fits(true, true)), Placed::Preferred(Right));
+        assert_eq!(place(rl, fits(false, true)), Placed::Preferred(Right));
+        assert_eq!(place(rl, fits(true, false)), Placed::Fallback(Left));
+        assert_eq!(place(rl, fits(false, false)), Placed::Hidden);
     }
 
     fn info(icons_left: Option<i32>) -> TaskbarInfo {
