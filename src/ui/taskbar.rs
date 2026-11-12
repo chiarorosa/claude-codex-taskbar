@@ -63,6 +63,24 @@ pub struct TaskbarInfo {
     pub widgets_button_on: bool,
     /// Left edge of the Start button, i.e. where the taskbar icons begin.
     pub icons_left: Option<i32>,
+    /// Right edge of the taskbar icons (screen px); `None` when unknown.
+    pub apps_right: Option<i32>,
+    /// Left edge of the system tray (screen px); `None` when unknown.
+    pub tray_left: Option<i32>,
+}
+
+/// Free width between the taskbar icons and the system tray, minus a margin on each side.
+/// Zero when either edge is unknown or the gap is crowded.
+pub fn right_gap_width(info: &TaskbarInfo, margin: i32) -> i32 {
+    match (info.apps_right, info.tray_left) {
+        (Some(apps_right), Some(tray_left)) => (tray_left - apps_right - 2 * margin).max(0),
+        _ => 0,
+    }
+}
+
+/// Left edge of a strip of `strip_width` that ends one margin before the tray.
+pub fn right_strip_left(tray_left: i32, margin: i32, strip_width: i32) -> i32 {
+    tray_left - margin - strip_width
 }
 
 /// Half-width assumed for the centered icon group when UI Automation is unavailable
@@ -348,6 +366,8 @@ pub fn query(with_icons: bool) -> Option<TaskbarInfo> {
         } else {
             None
         },
+        apps_right: None,
+        tray_left: None,
     })
 }
 
@@ -386,7 +406,50 @@ mod tests {
             windows_10: false,
             widgets_button_on: false,
             icons_left,
+            apps_right: None,
+            tray_left: None,
         }
+    }
+
+    fn right_info(apps_right: Option<i32>, tray_left: Option<i32>) -> TaskbarInfo {
+        TaskbarInfo {
+            apps_right,
+            tray_left,
+            ..info(None)
+        }
+    }
+
+    #[test]
+    fn right_gap_is_space_between_apps_and_tray() {
+        let i = right_info(Some(900), Some(1600));
+        assert_eq!(right_gap_width(&i, 8), 684);
+    }
+
+    #[test]
+    fn right_gap_is_zero_when_an_edge_is_missing() {
+        assert_eq!(right_gap_width(&right_info(None, Some(1600)), 8), 0);
+        assert_eq!(right_gap_width(&right_info(Some(900), None), 8), 0);
+        assert_eq!(right_gap_width(&right_info(None, None), 8), 0);
+    }
+
+    #[test]
+    fn right_gap_is_zero_when_crowded() {
+        let i = right_info(Some(1595), Some(1600));
+        assert_eq!(right_gap_width(&i, 8), 0);
+    }
+
+    #[test]
+    fn right_gap_scales_margin_with_dpi() {
+        use crate::ui::app::MARGIN_DIP;
+        use crate::ui::render::to_px;
+        let margin = to_px(MARGIN_DIP, 144);
+        let i = right_info(Some(900), Some(1600));
+        assert_eq!(right_gap_width(&i, margin), 700 - 2 * margin);
+    }
+
+    #[test]
+    fn strip_left_is_flush_with_tray() {
+        assert_eq!(right_strip_left(1600, 8, 300), 1292);
     }
 
     #[test]

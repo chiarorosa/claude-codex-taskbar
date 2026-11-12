@@ -40,7 +40,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 use windows::core::HSTRING;
 
 /// Strip offset from the taskbar's left edge, in DIPs.
-const MARGIN_DIP: f32 = 8.0;
+pub(crate) const MARGIN_DIP: f32 = 8.0;
 
 mod notifications;
 
