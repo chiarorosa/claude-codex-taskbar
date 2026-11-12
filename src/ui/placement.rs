@@ -1,7 +1,8 @@
 //! Placement watch (#10): turns each render's [`Placed`] into notices. A state other than
 //! the preferred side (the other side, or hidden) raises one notice once it settles; it is
-//! not repeated while that state lasts, and returning to the preferred side is silent. A
-//! fallback for `Auto` (never chosen in Settings) is silent too. Pure logic, no Win32: the
+//! not repeated while that state lasts, nor after a return to the preferred side shorter
+//! than [`SETTLE_SECS`], and returning to the preferred side is silent. A fallback for
+//! `Auto` (never chosen in Settings) is silent too. Pure logic, no Win32: the
 //! caller passes the time as whole seconds from a monotonic clock.
 
 use super::taskbar::{Placed, Side, side_order};
@@ -10,9 +11,8 @@ use crate::config::Placement;
 /// How long a non-preferred state must last, unchanged, before it settles.
 pub const SETTLE_SECS: u64 = 10;
 
-/// Nothing settles within this many seconds of startup, of the last
-/// [`PlacementWatch::restart`] (Explorer and the taskbar are still settling then) or of the
-/// last [`PlacementWatch::reset`].
+/// Nothing settles within this many seconds of startup or of the last
+/// [`PlacementWatch::restart`] (Explorer and the taskbar are still settling then).
 pub const GRACE_SECS: u64 = 30;
 
 /// Whether the next taskbar query should read the right-side edges: when the right side is
@@ -45,6 +45,15 @@ pub struct Notice {
     pub open_settings: bool,
 }
 
+/// The placement state a notice kind is about.
+fn state_of(kind: NoticeKind) -> Placed {
+    match kind {
+        NoticeKind::MovedRight => Placed::Fallback(Side::Right),
+        NoticeKind::MovedLeft => Placed::Fallback(Side::Left),
+        NoticeKind::Hidden => Placed::Hidden,
+    }
+}
+
 /// Watches the placement of one CCT run. A non-preferred state (fallback side or hidden)
 /// must hold [`SETTLE_SECS`], outside the [`GRACE_SECS`] grace, to settle; each settled
 /// state different from the last notified one raises one notice.
@@ -56,9 +65,11 @@ pub struct PlacementWatch {
     current: Option<(Placed, u64)>,
     /// The current state, once it has held long enough.
     settled: Option<Placed>,
-    /// The last state that raised a notice; cleared by `Preferred` and when an undelivered
-    /// notice is dropped.
+    /// The last state that raised a notice; cleared once `Preferred` has held
+    /// [`SETTLE_SECS`] and when an undelivered notice is dropped.
     last_notified: Option<Placed>,
+    /// When the current run at the preferred side began.
+    preferred_since: Option<u64>,
     /// The strip has been shown this run (since the last reset).
     ever_shown: bool,
     pending: Option<Notice>,
@@ -70,10 +81,18 @@ impl PlacementWatch {
             Placed::Preferred(_) => {
                 self.current = None;
                 self.settled = None;
-                self.pending = None;
-                self.last_notified = None;
+                // An undelivered notice is dropped at once and does not count as notified.
+                if self.pending.take().is_some() {
+                    self.last_notified = None;
+                }
+                // A brief return does not re-arm the notice for the same state.
+                let since = *self.preferred_since.get_or_insert(now_secs);
+                if now_secs.saturating_sub(since) >= SETTLE_SECS {
+                    self.last_notified = None;
+                }
             }
             Placed::Fallback(_) | Placed::Hidden => {
+                self.preferred_since = None;
                 if self.current.map(|(state, _)| state) != Some(placed) {
                     // After a restart `current` is empty and a pending notice is kept
                     // until the state settles again; a different state drops it, and an
@@ -102,6 +121,12 @@ impl PlacementWatch {
     }
 
     fn settle(&mut self, placed: Placed, explicit: bool) {
+        // A notice kept across a restart is for a state that may not be the one now
+        // settled: drop it (undelivered, so not notified) before any silent return.
+        if self.pending.is_some_and(|n| state_of(n.kind) != placed) {
+            self.pending = None;
+            self.last_notified = None;
+        }
         if self.last_notified == Some(placed) {
             return;
         }
@@ -139,11 +164,11 @@ impl PlacementWatch {
         self.settled = None;
     }
 
-    /// The placement preference changed in Settings: forget everything and start a new
-    /// grace period.
-    pub fn reset(&mut self, now_secs: u64) {
+    /// The placement preference changed in Settings: forget everything but the current
+    /// grace period (a click does not start a new one).
+    pub fn reset(&mut self) {
         *self = Self {
-            grace_from: now_secs,
+            grace_from: self.grace_from,
             ..Self::default()
         };
     }
@@ -233,13 +258,59 @@ mod tests {
         w.observe(Fallback(Side::Right), true, LATER + 10);
         assert!(w.pending_notice().is_some());
         w.notice_sent();
+        // The return holds long enough to count.
         w.observe(Preferred(Side::Left), true, LATER + 11);
+        w.observe(Preferred(Side::Left), true, LATER + 11 + SETTLE_SECS);
         // A short flap does not settle, so it does not notify.
-        w.observe(Fallback(Side::Right), true, LATER + 20);
-        w.observe(Fallback(Side::Right), true, LATER + 29);
+        w.observe(Fallback(Side::Right), true, LATER + 22);
+        w.observe(Fallback(Side::Right), true, LATER + 31);
         assert_eq!(w.pending_notice(), None);
-        w.observe(Fallback(Side::Right), true, LATER + 30);
+        w.observe(Fallback(Side::Right), true, LATER + 32);
         assert_eq!(w.pending_notice(), notice(NoticeKind::MovedRight, false));
+    }
+
+    #[test]
+    fn brief_return_does_not_renotify() {
+        let mut w = shown_watch();
+        w.observe(Fallback(Side::Right), true, LATER);
+        w.observe(Fallback(Side::Right), true, LATER + 10);
+        w.notice_sent();
+        // Back at the preferred side for 1 s only, then the same fallback again.
+        w.observe(Preferred(Side::Left), true, LATER + 11);
+        assert_eq!(w.pending_notice(), None);
+        for now in LATER + 12..LATER + 60 {
+            w.observe(Fallback(Side::Right), true, now);
+            assert_eq!(w.pending_notice(), None, "{now}");
+        }
+    }
+
+    #[test]
+    fn a_brief_return_drops_an_undelivered_notice_without_silencing_it() {
+        let mut w = shown_watch();
+        w.observe(Fallback(Side::Right), true, LATER);
+        w.observe(Fallback(Side::Right), true, LATER + 10);
+        assert!(w.pending_notice().is_some());
+        // Not delivered, then a 1 s return clears it at once.
+        w.observe(Preferred(Side::Left), true, LATER + 11);
+        assert_eq!(w.pending_notice(), None);
+        w.observe(Fallback(Side::Right), true, LATER + 12);
+        w.observe(Fallback(Side::Right), true, LATER + 12 + SETTLE_SECS);
+        assert_eq!(w.pending_notice(), notice(NoticeKind::MovedRight, false));
+    }
+
+    #[test]
+    fn a_silent_settle_drops_a_stale_pending_notice() {
+        let mut w = PlacementWatch::default();
+        w.observe(Preferred(Side::Left), false, LATER - 1);
+        w.observe(Hidden, false, LATER);
+        w.observe(Hidden, false, LATER + SETTLE_SECS);
+        assert_eq!(w.pending_notice(), notice(NoticeKind::Hidden, false));
+        // Explorer restarts before delivery; the auto fallback settles silently.
+        w.restart(LATER + 11);
+        for now in LATER + 11..=LATER + 11 + GRACE_SECS {
+            w.observe(Fallback(Side::Right), false, now);
+            assert_eq!(w.pending_notice(), None, "{now}");
+        }
     }
 
     #[test]
@@ -315,20 +386,28 @@ mod tests {
         w.observe(Fallback(Side::Right), true, LATER);
         w.observe(Fallback(Side::Right), true, LATER + 10);
         w.notice_sent();
-        w.reset(LATER + 20);
-        // New grace and no memory: the same fallback notifies again once settled.
-        for now in LATER + 20..LATER + 20 + GRACE_SECS {
-            w.observe(Fallback(Side::Right), true, now);
-            assert_eq!(w.pending_notice(), None, "{now}");
-        }
-        w.observe(Fallback(Side::Right), true, LATER + 20 + GRACE_SECS);
+        w.reset();
+        // No memory and no new grace: the same fallback notifies again once settled.
+        w.observe(Fallback(Side::Right), true, LATER + 20);
+        w.observe(Fallback(Side::Right), true, LATER + 20 + SETTLE_SECS - 1);
+        assert_eq!(w.pending_notice(), None);
+        w.observe(Fallback(Side::Right), true, LATER + 20 + SETTLE_SECS);
         assert_eq!(w.pending_notice(), notice(NoticeKind::MovedRight, false));
         // Hidden right after a reset counts as "before the strip was shown".
         let mut w = shown_watch();
-        w.reset(LATER);
-        w.observe(Hidden, true, LATER + GRACE_SECS);
-        w.observe(Hidden, true, LATER + GRACE_SECS + SETTLE_SECS);
+        w.reset();
+        w.observe(Hidden, true, LATER);
+        w.observe(Hidden, true, LATER + SETTLE_SECS);
         assert_eq!(w.pending_notice(), notice(NoticeKind::Hidden, true));
+        // A reset during the startup grace keeps that grace, it does not extend it.
+        let mut w = PlacementWatch::default();
+        w.reset();
+        for now in 5..GRACE_SECS {
+            w.observe(Fallback(Side::Right), true, now);
+            assert_eq!(w.pending_notice(), None, "{now}");
+        }
+        w.observe(Fallback(Side::Right), true, GRACE_SECS);
+        assert_eq!(w.pending_notice(), notice(NoticeKind::MovedRight, false));
     }
 
     #[test]

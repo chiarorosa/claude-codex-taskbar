@@ -203,7 +203,7 @@ impl App {
         self.cfg = cfg;
         if moved {
             // A new choice starts a fresh watch and a fresh look at both sides.
-            self.placement.reset(self.started.elapsed().as_secs());
+            self.placement.reset();
             self.invalidate_frame();
             self.apps_edge.reset();
             taskbar::invalidate_edges();
