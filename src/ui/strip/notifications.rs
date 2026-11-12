@@ -86,6 +86,22 @@ pub(super) fn drain(hwnd: HWND) {
     }
 }
 
+/// Whether the placement notice could be shown now: CCT is not closing, the shell accepts
+/// notifications and no fullscreen app covers the taskbar's monitor. Until then the notice
+/// stays pending (#10).
+pub(super) fn placement_deliverable(hwnd: HWND) -> bool {
+    if CLOSING.with(Cell::get) || !sink(hwnd).accepts() {
+        return false;
+    }
+    let monitor = with_app(|app| app.taskbar.as_ref().map(|t| t.monitor)).flatten();
+    !monitor.is_some_and(foreground_is_fullscreen)
+}
+
+/// Whether a balloon callback is a click on the placement notice, which opens Settings.
+fn opens_settings(event: u32, id: u16, placement: Option<u16>) -> bool {
+    event == NIN_BALLOONUSERCLICK && placement == Some(id)
+}
+
 /// Sends the one placement notice of this run (#10). Unlike limit notices it is not behind
 /// the near-limit opt-in; like them it is dropped over a fullscreen app or when CCT closes.
 pub(super) fn send_placement(hwnd: HWND) {
@@ -129,6 +145,9 @@ pub(super) fn handle(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> Op
             if [NIN_BALLOONHIDE, NIN_BALLOONTIMEOUT, NIN_BALLOONUSERCLICK].contains(&event) {
                 finish(hwnd, id);
             }
+            if opens_settings(event, id, PLACEMENT.with(Cell::get)) {
+                crate::ui::settings::open(hwnd);
+            }
             Some(LRESULT(0))
         }
         WM_TIMER if timer_icon(wparam.0).is_some() => {
@@ -150,5 +169,22 @@ pub(super) fn handle(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> Op
             None
         }
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_a_click_on_the_placement_balloon_opens_settings() {
+        assert!(opens_settings(NIN_BALLOONUSERCLICK, 7, Some(7)));
+        // A limit balloon, or no placement balloon at all.
+        assert!(!opens_settings(NIN_BALLOONUSERCLICK, 7, Some(8)));
+        assert!(!opens_settings(NIN_BALLOONUSERCLICK, 7, None));
+        // Shown, closed or timed out: not a click.
+        for event in [NIN_BALLOONSHOW, NIN_BALLOONHIDE, NIN_BALLOONTIMEOUT] {
+            assert!(!opens_settings(event, 7, Some(7)), "{event}");
+        }
     }
 }

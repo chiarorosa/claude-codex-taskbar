@@ -28,6 +28,7 @@ use crate::timeutil::now_unix;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::mpsc::Receiver;
+use std::time::Instant;
 use windows::Win32::Foundation::{HWND, LPARAM, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
     GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromWindow,
@@ -63,7 +64,8 @@ pub struct App {
     apps_edge: AppsEdgeCache,
     /// Settled right-side placement failures, for one notice per run (#10).
     placement: PlacementWatch,
-    placement_notice: bool,
+    /// Monotonic clock for the placement watch.
+    started: Instant,
     items: Vec<ItemView>,
     layout: Option<Layout>,
     frame: FrameCache,
@@ -152,7 +154,7 @@ impl App {
             icons: IconCache::default(),
             apps_edge: AppsEdgeCache::default(),
             placement: PlacementWatch::default(),
-            placement_notice: false,
+            started: Instant::now(),
             items: Vec::new(),
             layout: None,
             frame: FrameCache::default(),
@@ -285,10 +287,21 @@ impl App {
         self.light = light_theme();
     }
 
-    /// Asks for a fresh UI Automation icon lookup (icons may have moved).
+    /// Asks for a fresh UI Automation icon lookup (icons may have moved). Cheap: only marks
+    /// the caches dirty.
     pub fn invalidate_icons(&mut self) {
         self.icons.invalidate();
         self.apps_edge.invalidate();
+    }
+
+    /// Asks for a fresh read of the app buttons' edge only (an app window came or went).
+    pub fn invalidate_apps_edge(&mut self) {
+        self.apps_edge.invalidate();
+    }
+
+    /// The taskbar itself changed: read the app edge on the next render, without back-off.
+    pub fn reset_apps_edge(&mut self) {
+        self.apps_edge.reset();
     }
 
     pub fn tick_icons(&mut self) {
@@ -342,10 +355,20 @@ impl App {
         self.apps_edge.needs_lookup()
     }
 
-    /// Whether a right-side placement failure has settled and its one notice is still to be
-    /// sent; reading it clears it.
-    pub fn take_placement_notice(&mut self) -> bool {
-        std::mem::take(&mut self.placement_notice)
+    /// The placement notice still to be delivered while its failure is settled (#10):
+    /// `Some(true)` when it should also open Settings (the startup decision).
+    pub fn pending_placement_notice(&self) -> Option<bool> {
+        self.placement.pending_notice()
+    }
+
+    /// The placement notice has been delivered.
+    pub fn placement_notice_sent(&mut self) {
+        self.placement.notice_sent();
+    }
+
+    /// Explorer restarted: the placement watch starts a new grace period.
+    pub fn restart_placement(&mut self) {
+        self.placement.restart(self.started.elapsed().as_secs());
     }
 
     /// Whether the strip has settled as unable to sit next to the tray.
@@ -436,9 +459,9 @@ impl App {
         if !covered
             && !self.items.is_empty()
             && let Some(outcome) = outcome_of(info.side, &info, l.width)
-            && self.placement.observe(outcome).notify
         {
-            self.placement_notice = true;
+            self.placement
+                .observe(outcome, self.started.elapsed().as_secs());
         }
         // Right side: flush with the tray; a non-zero width means both edges were read.
         let left = match (right, info.tray_left) {
