@@ -9,6 +9,7 @@ pub mod frame;
 pub mod layout;
 pub mod menu;
 pub mod notifications;
+pub mod placement;
 pub mod render;
 pub mod settings;
 pub mod strip;
