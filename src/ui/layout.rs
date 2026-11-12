@@ -2,24 +2,15 @@
 
 use crate::model::Kind;
 
-/// Item widths measured by the renderer, in physical pixels.
+/// Item width measured by the renderer, in physical pixels: the wider of the label and
+/// the value with its bar, plus the account badge.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ItemMetrics {
-    pub full_w: i32,
-    pub compact_w: i32,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Mode {
-    /// Label row above value and bar.
-    Full,
-    /// Value and bar only.
-    Compact,
+    pub width: i32,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Layout {
-    pub mode: Mode,
     /// Indices into the input slice, in display order.
     pub visible: Vec<usize>,
     /// Input index of the last hardware item, when limit items follow it.
@@ -33,17 +24,10 @@ pub struct Layout {
 fn measure(
     items: &[(Kind, ItemMetrics)],
     shown: &[usize],
-    mode: Mode,
     gap: i32,
     sep_w: i32,
 ) -> (i32, Option<usize>) {
-    let mut width: i32 = shown
-        .iter()
-        .map(|&i| match mode {
-            Mode::Full => items[i].1.full_w,
-            Mode::Compact => items[i].1.compact_w,
-        })
-        .sum();
+    let mut width: i32 = shown.iter().map(|&i| items[i].1.width).sum();
     width += gap * (shown.len() as i32 - 1).max(0);
     let last_hw = shown
         .iter()
@@ -70,8 +54,8 @@ fn drop_order(items: &[(Kind, ItemMetrics)]) -> Vec<usize> {
         .collect()
 }
 
-/// Full with everything, else Compact with everything, else Compact dropping items
-/// (hardware first, see [`drop_order`]) with an ellipsis. Returns width 0 when nothing fits.
+/// Everything when it fits, else drops items (hardware first, see [`drop_order`]) and adds
+/// an ellipsis. Labels always stay. Returns width 0 when nothing fits.
 pub fn layout(
     items: &[(Kind, ItemMetrics)],
     available: i32,
@@ -80,27 +64,22 @@ pub fn layout(
     ellipsis_w: i32,
 ) -> Layout {
     let n = items.len();
-    let all: Vec<usize> = (0..n).collect();
-    for mode in [Mode::Full, Mode::Compact] {
-        let (width, separator_after) = measure(items, &all, mode, gap, sep_w);
-        if width <= available {
-            return Layout {
-                mode,
-                visible: all,
-                separator_after,
-                overflow: false,
-                width,
-            };
-        }
+    let mut visible: Vec<usize> = (0..n).collect();
+    let (width, separator_after) = measure(items, &visible, gap, sep_w);
+    if width <= available {
+        return Layout {
+            visible,
+            separator_after,
+            overflow: false,
+            width,
+        };
     }
-    let mut visible = all;
     for dropped in drop_order(items).into_iter().take(n.saturating_sub(1)) {
         visible.retain(|&i| i != dropped);
-        let (width, separator_after) = measure(items, &visible, Mode::Compact, gap, sep_w);
+        let (width, separator_after) = measure(items, &visible, gap, sep_w);
         let width = width + gap + ellipsis_w;
         if width <= available {
             return Layout {
-                mode: Mode::Compact,
                 visible,
                 separator_after,
                 overflow: true,
@@ -109,7 +88,6 @@ pub fn layout(
         }
     }
     Layout {
-        mode: Mode::Compact,
         visible: Vec::new(),
         separator_after: None,
         overflow: n > 0,
@@ -127,14 +105,8 @@ mod tests {
     const ELL: i32 = 12;
 
     fn items() -> Vec<(Kind, ItemMetrics)> {
-        let hw = ItemMetrics {
-            full_w: 40,
-            compact_w: 30,
-        };
-        let cl = ItemMetrics {
-            full_w: 50,
-            compact_w: 30,
-        };
+        let hw = ItemMetrics { width: 40 };
+        let cl = ItemMetrics { width: 50 };
         vec![
             (Kind::Hardware, hw),
             (Kind::Hardware, hw),
@@ -145,9 +117,8 @@ mod tests {
     }
 
     #[test]
-    fn fits_full() {
+    fn fits_everything() {
         let l = layout(&items(), 300, GAP, SEP, ELL);
-        assert_eq!(l.mode, Mode::Full);
         assert_eq!(l.visible, vec![0, 1, 2, 3, 4]);
         assert_eq!(l.separator_after, Some(2));
         assert!(!l.overflow);
@@ -155,32 +126,23 @@ mod tests {
     }
 
     #[test]
-    fn falls_back_to_compact() {
-        let l = layout(&items(), 250, GAP, SEP, ELL);
-        assert_eq!(l.mode, Mode::Compact);
-        assert_eq!(l.visible.len(), 5);
-        assert!(!l.overflow);
-        assert_eq!(l.width, 201);
-    }
-
-    #[test]
     fn drops_hardware_before_limits() {
-        // Hardware goes first, from its last item: quotas are why CCT exists.
-        let l = layout(&items(), 150, GAP, SEP, ELL);
-        assert_eq!(l.mode, Mode::Compact);
-        assert_eq!(l.visible, vec![0, 3, 4]);
+        // Hardware goes first, from its last item: quotas are why CCT exists. Labels stay,
+        // so the strip never trades every label for one more hardware item.
+        let l = layout(&items(), 250, GAP, SEP, ELL);
+        assert_eq!(l.visible, vec![0, 1, 3, 4]);
         assert!(l.overflow);
-        assert_eq!(l.separator_after, Some(0));
-        assert_eq!(l.width, 143);
+        assert_eq!(l.separator_after, Some(1));
+        assert_eq!(l.width, 243);
     }
 
     #[test]
     fn drops_limits_from_end_once_hardware_is_gone() {
-        let l = layout(&items(), 75, GAP, SEP, ELL);
+        let l = layout(&items(), 80, GAP, SEP, ELL);
         assert_eq!(l.visible, vec![3]);
         assert!(l.overflow);
         assert_eq!(l.separator_after, None);
-        assert_eq!(l.width, 52);
+        assert_eq!(l.width, 72);
     }
 
     #[test]
