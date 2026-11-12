@@ -481,6 +481,17 @@ impl App {
             self.renderer.ellipsis_px(dpi),
         );
         let left_layout = layout(&kinds, key.available, gap, sep, ellipsis);
+        if super::placement::needs_second_pass(
+            horizontal,
+            edges,
+            !self.items.is_empty(),
+            left_layout.width > 0,
+        ) {
+            // The left side just ran out of room and the right side was not read: the edge
+            // pass that follows decides, so the strip neither blinks nor counts as hidden.
+            self.left_fitted_last = Some(false);
+            return;
+        }
         // The right side has room only with both edges read on a horizontal taskbar.
         let right_layout = (edges && info.tray_left.is_some() && key.right_available > 0)
             .then(|| layout(&kinds, key.right_available, gap, sep, ellipsis))

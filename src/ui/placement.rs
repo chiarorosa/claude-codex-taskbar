@@ -30,6 +30,19 @@ pub fn wants_edges(
         }
 }
 
+/// Whether a render without the right-side edges must leave the decision to a second pass
+/// that reads them: on a horizontal taskbar, with something to show, when the left side has
+/// no room. That pass neither hides the strip nor counts toward settling, so a strip that
+/// moves to the right does not blink and never passes through `Hidden`.
+pub fn needs_second_pass(
+    horizontal: bool,
+    edges_read: bool,
+    has_items: bool,
+    left_fits: bool,
+) -> bool {
+    horizontal && !edges_read && has_items && !left_fits
+}
+
 /// Which message a settled placement state raises.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NoticeKind {
@@ -310,6 +323,25 @@ mod tests {
         for now in LATER + 11..=LATER + 11 + GRACE_SECS {
             w.observe(Fallback(Side::Right), false, now);
             assert_eq!(w.pending_notice(), None, "{now}");
+        }
+    }
+
+    #[test]
+    fn needs_second_pass_table() {
+        // (horizontal, edges read, has items, left fits) -> defer to the edge pass
+        let table = [
+            (true, false, true, false, true),
+            (true, false, true, true, false),
+            (true, true, true, false, false),
+            (true, false, false, false, false),
+            (false, false, true, false, false),
+        ];
+        for (horizontal, edges, items, fits, want) in table {
+            assert_eq!(
+                needs_second_pass(horizontal, edges, items, fits),
+                want,
+                "{horizontal} {edges} {items} {fits}"
+            );
         }
     }
 

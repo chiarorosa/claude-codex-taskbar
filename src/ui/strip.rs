@@ -152,8 +152,8 @@ fn render(hwnd: HWND) {
         return;
     };
     render_once(hwnd, need_icons, need_apps, with_edges);
-    // The left side just ran out of room: look at the right side now instead of hiding
-    // until the next render.
+    // The left side just ran out of room: the first pass left the decision to this one,
+    // which reads the right side (`placement::needs_second_pass`).
     if !with_edges && with_app(|app| app.needs_edges()) == Some(true) {
         let need_apps = with_app(|app| app.needs_apps_edge()).unwrap_or(false);
         render_once(hwnd, false, need_apps, true);
