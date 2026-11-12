@@ -491,6 +491,7 @@ impl App {
                 left_aligned: t.left_aligned,
                 widgets_button_on: t.widgets_button_on,
                 windows_10: t.windows_10,
+                side: t.side,
             },
             None => TaskbarHints::default(),
         }

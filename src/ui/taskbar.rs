@@ -227,8 +227,9 @@ pub fn icons_left_aligned(build: Option<u32>, taskbar_al: Option<u32>) -> bool {
 }
 
 /// Which end of the taskbar the strip sits at.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum Side {
+    #[default]
     Left,
     Right,
 }
