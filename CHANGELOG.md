@@ -7,14 +7,18 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
-- **Next to the system tray (Windows 10, and `"placement": "right"`).** On Windows 10 the strip
-  now shows next to the system tray, flush with its left edge, and follows it as tray icons come
-  and go. Windows 11 does the same when taskbar icons are left-aligned. On any Windows, set
-  `"placement": "right"` in `%APPDATA%\claude-codex-taskbar\config.json` (`auto` is the default;
-  `left` and `right` are the others; no Settings option yet). When the strip cannot be placed
-  there (no room, or the taskbar lookup keeps failing), it stays hidden, Windows shows one
-  notification per run, and clicking it opens Settings (at startup Settings opens by itself).
-  Vertical taskbars keep the old behavior (#10).
+- **Strip position selector, with fallback (Windows 10 and 11).** Settings → General has a new
+  *Strip position* choice, *Left* (default) or *Right*, applied at once. Left uses the left
+  corner; Right sits next to the system tray, flush with its left edge, and follows it as tray
+  icons come and go. If the chosen side has no room (Windows 10, or Windows 11 with left-aligned
+  icons) the strip moves to the other side, and it hides only when neither side fits. If you
+  picked a side and it could not be used, Windows tells you once when the strip moves or hides
+  (only after the situation lasts a few seconds); without a choice, moving right is silent and
+  hiding is notified. Clicking a notice opens Settings, which opens by itself only when the strip
+  cannot be shown at startup. You no longer need to center taskbar icons; the Widgets button
+  hint applies only to the left corner on Windows 11 with centered icons. The `placement` key
+  in `config.json` (`auto`, `left`, `right`) still works. Vertical taskbars keep the old
+  behavior (#10).
 - **Check for updates, on click only.** Settings → General shows the running version with a
   *Check for updates* button. Only when you press it, CCT asks GitHub's releases API once and
   says whether you have the latest version or which one is available, with a button to open
