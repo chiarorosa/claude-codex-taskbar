@@ -125,10 +125,11 @@ fn reassert_topmost(hwnd: HWND) {
 }
 
 fn render(hwnd: HWND) {
-    let Some(need_icons) = with_app(|app| app.needs_icons()) else {
+    let Some((need_icons, placement)) = with_app(|app| (app.needs_icons(), app.cfg.placement))
+    else {
         return;
     };
-    let info = super::taskbar::query(need_icons);
+    let info = super::taskbar::query(need_icons, placement);
     with_app(|app| app.render(hwnd, info, need_icons));
 }
 

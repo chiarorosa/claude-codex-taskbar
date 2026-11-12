@@ -19,6 +19,10 @@ use windows::Win32::UI::Shell::{ABM_GETSTATE, ABS_AUTOHIDE, APPBARDATA, SHAppBar
 use windows::Win32::UI::WindowsAndMessaging::{FindWindowW, GetWindowRect};
 use windows::core::{BSTR, HSTRING, w};
 
+mod edges;
+
+pub use edges::invalidate_edges;
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Rect {
     pub left: i32,
@@ -67,6 +71,8 @@ pub struct TaskbarInfo {
     pub apps_right: Option<i32>,
     /// Left edge of the system tray (screen px); `None` when unknown.
     pub tray_left: Option<i32>,
+    /// Which end of the taskbar the strip sits at; edges are read only for [`Side::Right`].
+    pub side: Side,
 }
 
 /// Free width between the taskbar icons and the system tray, minus a margin on each side.
@@ -327,8 +333,9 @@ pub fn taskbar_hwnd() -> Option<HWND> {
     unsafe { FindWindowW(w!("Shell_TrayWnd"), None) }.ok()
 }
 
-/// Queries the primary taskbar. `with_icons` runs the (slower) UI Automation lookup.
-pub fn query(with_icons: bool) -> Option<TaskbarInfo> {
+/// Queries the primary taskbar. `with_icons` runs the (slower) UI Automation lookup of the
+/// Start button; the app and tray edges are read only when `placement` resolves to the right.
+pub fn query(with_icons: bool, placement: Placement) -> Option<TaskbarInfo> {
     let hwnd = taskbar_hwnd()?;
     let mut rect = RECT::default();
     // SAFETY: hwnd is a live window; rect is a valid out pointer.
@@ -351,6 +358,16 @@ pub fn query(with_icons: bool) -> Option<TaskbarInfo> {
     let state = unsafe { SHAppBarMessage(ABM_GETSTATE, &mut abd) } as u32;
     let build = windows_build();
     let overlap = rect.bottom.min(monitor.bottom) - rect.top.max(monitor.top);
+    let windows_10 = is_windows_10(build);
+    let left_aligned = icons_left_aligned(build, reg_dword(ADVANCED_KEY, "TaskbarAl"));
+    let side = resolve_side(placement, windows_10, left_aligned);
+    let (apps_right, tray_left) = match side {
+        Side::Right => (
+            edges::apps_right(hwnd, rect, windows_10),
+            edges::tray_left(hwnd, rect),
+        ),
+        Side::Left => (None, None),
+    };
     Some(TaskbarInfo {
         rect,
         monitor,
@@ -358,16 +375,17 @@ pub fn query(with_icons: bool) -> Option<TaskbarInfo> {
         dpi: unsafe { GetDpiForWindow(hwnd) }.max(96),
         autohide: state & ABS_AUTOHIDE != 0,
         visible: overlap > 4,
-        left_aligned: icons_left_aligned(build, reg_dword(ADVANCED_KEY, "TaskbarAl")),
-        windows_10: is_windows_10(build),
+        left_aligned,
+        windows_10,
         widgets_button_on: widgets_button_on(build, reg_dword(ADVANCED_KEY, "TaskbarDa")),
         icons_left: if with_icons {
             start_button_left(hwnd)
         } else {
             None
         },
-        apps_right: None,
-        tray_left: None,
+        apps_right,
+        tray_left,
+        side,
     })
 }
 
@@ -408,6 +426,7 @@ mod tests {
             icons_left,
             apps_right: None,
             tray_left: None,
+            side: Side::Left,
         }
     }
 
@@ -591,7 +610,7 @@ mod live {
                 windows::Win32::System::Com::COINIT_APARTMENTTHREADED,
             );
         }
-        let info = super::query(true).expect("taskbar");
+        let info = super::query(true, crate::config::Placement::Auto).expect("taskbar");
         println!("{info:?} available={}", super::available_width(&info, 8));
         assert!(info.rect.width() > 0 && info.dpi >= 96);
     }

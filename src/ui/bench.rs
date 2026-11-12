@@ -5,7 +5,7 @@ use super::layout::layout;
 use super::render::{GAP, Renderer, SEP_W, to_px};
 use super::taskbar;
 use super::view::build_items;
-use crate::config::Config;
+use crate::config::{Config, Placement};
 use crate::hw::Sampler;
 use crate::i18n::Lang;
 use crate::limits::ProviderStatus;
@@ -32,7 +32,7 @@ fn idle_cost() {
     unsafe {
         let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
     }
-    let info = taskbar::query(false).expect("taskbar");
+    let info = taskbar::query(false, Placement::Auto).expect("taskbar");
     let dpi = info.dpi;
     let mut sampler = Sampler::new();
     sampler.sample();
@@ -75,13 +75,13 @@ fn idle_cost() {
         (
             "taskbar query",
             time_us(200, || {
-                taskbar::query(false);
+                taskbar::query(false, Placement::Auto);
             }),
         ),
         (
             "icon lookup",
             time_us(20, || {
-                taskbar::query(true);
+                taskbar::query(true, Placement::Auto);
             }),
         ),
         (
