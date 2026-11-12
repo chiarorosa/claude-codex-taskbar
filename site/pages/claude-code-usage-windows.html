@@ -46,6 +46,7 @@
   <ul>
     <li><strong>The label</strong> (for example <code>P</code> or <code>W</code>) tells you which account the numbers belong to. Set it in Settings.</li>
     <li><strong>Two gauges</strong> show the 5-hour and weekly % used. The bar uses the Claude color, turns amber from 75% and red from 90%.</li>
+    <li><strong>The tick</strong> on each bar shows the time: it marks how much of the window has passed, moves left to right, and reaches the end of the bar at the reset. Fill behind the tick means the quota lasts until the reset; fill past the tick means you are using it faster than the clock and may hit the limit early. It shows only on fresh readings with a known reset time.</li>
     <li><strong>Hover</strong> for the reset times in your local time, the weekly Opus and Sonnet percentages, and a notice when extra usage is on.</li>
     <li><strong><code>—</code> instead of a number</strong> means CCT could not read the limit (expired login, endpoint down). It never shows a fake <code>0%</code>; the tooltip says why.</li>
     <li>Prefer to see what is <strong>left</strong>? Turn on “Show remaining” in Settings: <code>38%</code> left instead of <code>62%</code> used.</li>

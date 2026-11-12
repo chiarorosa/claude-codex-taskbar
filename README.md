@@ -72,6 +72,7 @@ Each entry shows the plan and the usage last seen on that account. `⚠ login ex
 
 - **Claude Code limits**: 5-hour and weekly usage; hover for Opus/Sonnet weekly percentages, local reset times and an extra-usage notice.
 - **Codex limits**: 5-hour and weekly usage of the current `codex` login, with an offline fallback to the Codex CLI.
+- **Pace tick**: a thin mark on each Claude and Codex bar shows the time already passed in the 5-hour or weekly window; it moves left to right and reaches the end of the bar at the reset. Fill behind the tick: the quota lasts until the reset. Fill past it: you are using it faster than the clock.
 - **Claude account switcher**: save paid logins, see which one is active, switch in three clicks.
 - **Account labels**: a short tag of your choice (default `P`) before the Claude and Codex gauges; each saved Claude account keeps its own, so the strip shows it after a switch. Edit it in Settings.
 - **Hardware**: CPU, RAM, GPU (busiest engine, like Task Manager) and per-disk active time.
@@ -133,7 +134,7 @@ Look at the label before the Claude gauges (for example `P` or `W`, set in Setti
 CCT only automates what you would do by hand with `/logout` and `/login`, for accounts that are yours, and only when you click. It never switches automatically or rotates accounts to get around limits. Make sure your use follows each provider's terms.
 
 ### How do I see my Claude Code and Codex usage limits on Windows?
-The strip shows the % used of the 5-hour and weekly windows (the same numbers as `/usage` in Claude Code and `/status` in Codex), refreshed every 2 minutes. Hover for reset times.
+The strip shows the % used of the 5-hour and weekly windows (the same numbers as `/usage` in Claude Code and `/status` in Codex), refreshed every 2 minutes. Hover for reset times. A thin tick on each bar marks how much of the window has passed and reaches the end of the bar at the reset: fill behind the tick means the quota lasts until the reset, fill past it means you are ahead of the clock.
 
 ### Does it need an API key or my password?
 No. It reuses the login the official `claude` and `codex` CLIs already saved on your PC.
