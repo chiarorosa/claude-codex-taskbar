@@ -32,7 +32,9 @@ fn idle_cost() {
     unsafe {
         let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
     }
-    let info = taskbar::query(false, Placement::Auto).expect("taskbar");
+    let info = taskbar::query(false, false, Placement::Auto).expect("taskbar");
+    // Warms the edge cache, so "right query warm" times the steady per-render cost.
+    taskbar::query(false, true, Placement::Right).expect("taskbar");
     let dpi = info.dpi;
     let mut sampler = Sampler::new();
     sampler.sample();
@@ -75,13 +77,32 @@ fn idle_cost() {
         (
             "taskbar query",
             time_us(200, || {
-                taskbar::query(false, Placement::Auto);
+                taskbar::query(false, false, Placement::Auto);
+            }),
+        ),
+        (
+            "right query warm",
+            time_us(200, || {
+                taskbar::query(false, true, Placement::Right);
+            }),
+        ),
+        (
+            "right query cached",
+            time_us(200, || {
+                taskbar::query(false, false, Placement::Right);
+            }),
+        ),
+        (
+            "right query cold",
+            time_us(20, || {
+                taskbar::invalidate_edges();
+                taskbar::query(false, true, Placement::Right);
             }),
         ),
         (
             "icon lookup",
             time_us(20, || {
-                taskbar::query(true, Placement::Auto);
+                taskbar::query(true, false, Placement::Auto);
             }),
         ),
         (

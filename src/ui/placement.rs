@@ -1,6 +1,8 @@
 //! Placement watch: turns per-attempt placement outcomes into a settled
 //! failure flag and at most one notification per CCT run. Pure logic, no Win32.
 
+use super::taskbar::{Side, TaskbarInfo};
+
 /// Consecutive `LookupFailed` observations needed before the failure settles.
 pub const LOOKUP_FAILS_TO_SETTLE: u32 = 3;
 
@@ -12,6 +14,20 @@ pub enum Outcome {
     NoRoom,
     /// The tray geometry could not be read.
     LookupFailed,
+}
+
+/// What one uncovered render means for the watch: `None` on the left side, which hides
+/// silently as before and never notifies; on the right, a missing edge is a failed lookup and
+/// a layout with no width (both edges read) means the gap is too small.
+pub fn outcome_of(side: Side, info: &TaskbarInfo, layout_width: i32) -> Option<Outcome> {
+    match side {
+        Side::Left => None,
+        Side::Right if info.apps_right.is_none() || info.tray_left.is_none() => {
+            Some(Outcome::LookupFailed)
+        }
+        Side::Right if layout_width == 0 => Some(Outcome::NoRoom),
+        Side::Right => Some(Outcome::Placed),
+    }
 }
 
 /// What the caller should do after an observation.
@@ -65,6 +81,7 @@ impl PlacementWatch {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ui::taskbar::Rect;
 
     fn v(settled_failure: bool, notify: bool) -> Verdict {
         Verdict {
@@ -109,6 +126,60 @@ mod tests {
         assert_eq!(w.observe(Outcome::NoRoom), v(true, true));
         assert_eq!(w.observe(Outcome::Placed), v(false, false));
         assert_eq!(w.observe(Outcome::NoRoom), v(true, false));
+    }
+
+    fn info(apps_right: Option<i32>, tray_left: Option<i32>) -> TaskbarInfo {
+        let bar = Rect {
+            left: 0,
+            top: 1032,
+            right: 1920,
+            bottom: 1080,
+        };
+        TaskbarInfo {
+            rect: bar,
+            monitor: bar,
+            dpi: 96,
+            autohide: false,
+            visible: true,
+            left_aligned: false,
+            windows_10: true,
+            widgets_button_on: false,
+            icons_left: None,
+            apps_right,
+            tray_left,
+            side: Side::Right,
+        }
+    }
+
+    #[test]
+    fn left_side_never_feeds_the_watch() {
+        for i in [info(None, None), info(Some(900), Some(1600))] {
+            assert_eq!(outcome_of(Side::Left, &i, 0), None);
+            assert_eq!(outcome_of(Side::Left, &i, 300), None);
+        }
+    }
+
+    #[test]
+    fn a_missing_edge_is_a_lookup_failure() {
+        for i in [
+            info(None, Some(1600)),
+            info(Some(900), None),
+            info(None, None),
+        ] {
+            assert_eq!(outcome_of(Side::Right, &i, 0), Some(Outcome::LookupFailed));
+        }
+    }
+
+    #[test]
+    fn both_edges_and_no_width_is_no_room() {
+        let i = info(Some(1590), Some(1600));
+        assert_eq!(outcome_of(Side::Right, &i, 0), Some(Outcome::NoRoom));
+    }
+
+    #[test]
+    fn both_edges_and_a_width_is_placed() {
+        let i = info(Some(900), Some(1600));
+        assert_eq!(outcome_of(Side::Right, &i, 300), Some(Outcome::Placed));
     }
 
     #[test]

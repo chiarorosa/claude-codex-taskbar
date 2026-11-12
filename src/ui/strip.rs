@@ -125,12 +125,30 @@ fn reassert_topmost(hwnd: HWND) {
 }
 
 fn render(hwnd: HWND) {
-    let Some((need_icons, placement)) = with_app(|app| (app.needs_icons(), app.cfg.placement))
+    let Some((need_icons, need_apps, placement)) =
+        with_app(|app| (app.needs_icons(), app.needs_apps_edge(), app.cfg.placement))
     else {
         return;
     };
-    let info = super::taskbar::query(need_icons, placement);
-    with_app(|app| app.render(hwnd, info, need_icons));
+    let info = super::taskbar::query(need_icons, need_apps, placement);
+    with_app(|app| app.render(hwnd, info, need_icons, need_apps));
+}
+
+/// Tells the user once per run that the strip cannot sit next to the tray (#10): a balloon,
+/// and Settings, where fewer items can be chosen. Waits while the strip's menu is open.
+fn deliver_placement_notice(hwnd: HWND) {
+    if !may_raise() || with_app(|app| app.take_placement_notice()) != Some(true) {
+        return;
+    }
+    notifications::send_placement(hwnd);
+    super::settings::open(hwnd);
+}
+
+/// Asks for fresh taskbar lookups: the icons, the app buttons and their UI Automation
+/// container, which can be stale after Explorer or the display changed.
+fn invalidate_lookups(app: &mut App) {
+    app.invalidate_icons();
+    super::taskbar::invalidate_edges();
 }
 
 fn set_hw_timer(hwnd: HWND, secs: u32) {
@@ -289,17 +307,21 @@ extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM)
                 _ => {}
             }
             render(hwnd);
+            if wparam.0 == TIMER_HW {
+                deliver_placement_notice(hwnd);
+            }
             LRESULT(0)
         }
         WM_APP_LIMITS => {
             notifications::drain(hwnd);
             arm_reset_timer(hwnd);
             render(hwnd);
+            deliver_placement_notice(hwnd);
             LRESULT(0)
         }
         WM_APP_REASSERT => {
             // Foreground changes coincide with apps opening/closing, which shifts the icons.
-            with_app(|app| app.invalidate_icons());
+            with_app(invalidate_lookups);
             render(hwnd);
             LRESULT(0)
         }
@@ -321,7 +343,7 @@ extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM)
         }
         WM_DISPLAYCHANGE | WM_DPICHANGED => {
             with_app(|app| {
-                app.invalidate_icons();
+                invalidate_lookups(app);
                 app.invalidate_frame();
             });
             render(hwnd);
@@ -330,7 +352,7 @@ extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM)
         WM_SETTINGCHANGE => {
             with_app(|app| {
                 app.theme_changed();
-                app.invalidate_icons();
+                invalidate_lookups(app);
             });
             render(hwnd);
             LRESULT(0)
@@ -382,7 +404,7 @@ extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM)
         _ if taskbar_created != 0 && msg == taskbar_created => {
             notifications::cancel(hwnd);
             with_app(|app| {
-                app.invalidate_icons();
+                invalidate_lookups(app);
                 app.invalidate_frame();
             });
             render(hwnd);
@@ -529,10 +551,12 @@ pub fn run(app: App) -> i32 {
         let inbox = spawn_worker(hwnd, control);
         with_app(|app| app.set_inbox(inbox));
         render(hwnd);
-        // A left-aligned taskbar leaves no room, so the strip stays hidden: explain why.
-        if with_app(|app| app.taskbar_hints().left_aligned) == Some(true) {
+        // Left side: left-aligned icons leave no room, so the strip stays hidden: explain why.
+        // Right side: Settings opens with the placement notice, once the failure settles.
+        if with_app(|app| app.left_side_blocked()) == Some(true) {
             super::settings::open(hwnd);
         }
+        deliver_placement_notice(hwnd);
         // One-time opt-in invitation; the app is not borrowed while the modal box runs.
         if let Some((body, kinds)) = with_app(|app| app.keepalive_prompt()).flatten() {
             let body = wide_z(&body);

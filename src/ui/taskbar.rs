@@ -156,6 +156,41 @@ impl IconCache {
     }
 }
 
+/// Caches the right edge of the app buttons for the right placement (#10). Even warm, the
+/// UI Automation read costs about 2.7 ms, so a successful read is reused for
+/// [`ICON_PERIOD_TICKS`] ticks or until invalidated (apps open and close). A failed read is
+/// never kept as a guess: the value is dropped and the next render reads again.
+#[derive(Debug, Default)]
+pub struct AppsEdgeCache {
+    last: Option<i32>,
+    ticks: u32,
+    dirty: bool,
+}
+
+impl AppsEdgeCache {
+    pub fn needs_lookup(&self) -> bool {
+        self.last.is_none() || self.dirty || self.ticks >= ICON_PERIOD_TICKS
+    }
+
+    pub fn on_lookup(&mut self, result: Option<i32>) {
+        self.last = result;
+        self.ticks = 0;
+        self.dirty = false;
+    }
+
+    pub fn tick(&mut self) {
+        self.ticks = self.ticks.saturating_add(1);
+    }
+
+    pub fn invalidate(&mut self) {
+        self.dirty = true;
+    }
+
+    pub fn value(&self) -> Option<i32> {
+        self.last
+    }
+}
+
 /// Hide only for fullscreen on the taskbar's own monitor: the shell's "busy" state is
 /// system-wide, so it is trusted only when the foreground window is on that monitor.
 pub fn hides_for_fullscreen(
@@ -334,8 +369,9 @@ pub fn taskbar_hwnd() -> Option<HWND> {
 }
 
 /// Queries the primary taskbar. `with_icons` runs the (slower) UI Automation lookup of the
-/// Start button; the app and tray edges are read only when `placement` resolves to the right.
-pub fn query(with_icons: bool, placement: Placement) -> Option<TaskbarInfo> {
+/// Start button. The tray edge is read only when `placement` resolves to the right, and the
+/// app edge (UI Automation, see [`AppsEdgeCache`]) only then and when `with_apps` is set.
+pub fn query(with_icons: bool, with_apps: bool, placement: Placement) -> Option<TaskbarInfo> {
     let hwnd = taskbar_hwnd()?;
     let mut rect = RECT::default();
     // SAFETY: hwnd is a live window; rect is a valid out pointer.
@@ -363,7 +399,9 @@ pub fn query(with_icons: bool, placement: Placement) -> Option<TaskbarInfo> {
     let side = resolve_side(placement, windows_10, left_aligned);
     let (apps_right, tray_left) = match side {
         Side::Right => (
-            edges::apps_right(hwnd, rect, windows_10),
+            with_apps
+                .then(|| edges::apps_right(hwnd, rect, windows_10))
+                .flatten(),
             edges::tray_left(hwnd, rect),
         ),
         Side::Left => (None, None),
@@ -464,6 +502,44 @@ mod tests {
         let margin = to_px(MARGIN_DIP, 144);
         let i = right_info(Some(900), Some(1600));
         assert_eq!(right_gap_width(&i, margin), 700 - 2 * margin);
+    }
+
+    #[test]
+    fn apps_edge_is_read_until_it_succeeds() {
+        let mut c = AppsEdgeCache::default();
+        assert!(c.needs_lookup());
+        c.on_lookup(None);
+        // A failed read is never cached as a guess; the next render retries.
+        assert!(c.needs_lookup());
+        assert_eq!(c.value(), None);
+        c.on_lookup(Some(1159));
+        assert!(!c.needs_lookup());
+        assert_eq!(c.value(), Some(1159));
+    }
+
+    #[test]
+    fn apps_edge_refreshes_on_the_icon_cadence() {
+        let mut c = AppsEdgeCache::default();
+        c.on_lookup(Some(1159));
+        for _ in 1..ICON_PERIOD_TICKS {
+            c.tick();
+            assert!(!c.needs_lookup());
+        }
+        c.tick();
+        assert!(c.needs_lookup());
+        c.on_lookup(Some(1203));
+        assert!(!c.needs_lookup());
+        assert_eq!(c.value(), Some(1203));
+    }
+
+    #[test]
+    fn apps_edge_invalidate_forces_a_read_and_a_failure_drops_the_value() {
+        let mut c = AppsEdgeCache::default();
+        c.on_lookup(Some(1159));
+        c.invalidate();
+        assert!(c.needs_lookup());
+        c.on_lookup(None);
+        assert_eq!(c.value(), None);
     }
 
     #[test]
@@ -610,7 +686,7 @@ mod live {
                 windows::Win32::System::Com::COINIT_APARTMENTTHREADED,
             );
         }
-        let info = super::query(true, crate::config::Placement::Auto).expect("taskbar");
+        let info = super::query(true, true, crate::config::Placement::Auto).expect("taskbar");
         println!("{info:?} available={}", super::available_width(&info, 8));
         assert!(info.rect.width() > 0 && info.dpi >= 96);
     }

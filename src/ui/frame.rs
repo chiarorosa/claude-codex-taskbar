@@ -11,6 +11,8 @@ pub struct FrameKey {
     pub dpi: u32,
     /// Width the layout may use, in pixels.
     pub available: i32,
+    /// The tray's left edge on the right side (#10), which the strip is flush with.
+    pub tray_left: Option<i32>,
     pub light: bool,
 }
 
@@ -61,6 +63,7 @@ mod tests {
             },
             dpi: 96,
             available: 700,
+            tray_left: None,
             light: false,
         }
     }
@@ -92,6 +95,11 @@ mod tests {
             },
             FrameKey {
                 taskbar: Rect::default(),
+                ..key(10.0)
+            },
+            // A moved tray moves a right-side strip (#10).
+            FrameKey {
+                tray_left: Some(1600),
                 ..key(10.0)
             },
         ] {
