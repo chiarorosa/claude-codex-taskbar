@@ -7,6 +7,14 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Next to the system tray (Windows 10, and `"placement": "right"`).** On Windows 10 the strip
+  now shows next to the system tray, flush with its left edge, and follows it as tray icons come
+  and go. Windows 11 does the same when taskbar icons are left-aligned. On any Windows, set
+  `"placement": "right"` in `%APPDATA%\claude-codex-taskbar\config.json` (`auto` is the default;
+  `left` and `right` are the others; no Settings option yet). When the strip cannot be placed
+  there (no room, or the taskbar lookup keeps failing), it stays hidden, Windows shows one
+  notification per run, and clicking it opens Settings (at startup Settings opens by itself).
+  Vertical taskbars keep the old behavior (#10).
 - **Check for updates, on click only.** Settings → General shows the running version with a
   *Check for updates* button. Only when you press it, CCT asks GitHub's releases API once and
   says whether you have the latest version or which one is available, with a button to open
@@ -30,6 +38,10 @@ All notable changes to this project are documented here. The format follows
   `codex app-server` (#87).
 
 ### Changed
+- **Hardware items are dropped first when space runs out.** The order is disks, GPU, RAM, CPU,
+  then usage limits from the end. Labels always stay (the compact mode without labels is gone),
+  and the "…" now sits where items were dropped. Hidden items are still listed in the tooltip
+  (#10).
 - **20 KB smaller.** Percentages are now rounded by CCT's own code, with the exact text the
   standard formatter gave, and menu access keys and plan names compare ASCII. That keeps the
   standard library's float formatter and Unicode case tables out of the `.exe` (#83).

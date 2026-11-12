@@ -91,7 +91,7 @@ Each entry shows the plan and the usage last seen on that account. `⚠ login ex
 
 **Requirements:** Windows 11 or Windows 10 (x64), and a logged-in [Claude Code](https://docs.anthropic.com/en/docs/claude-code) and/or Codex CLI on the same Windows user.
 
-Turn off the Windows Widgets button (*Settings → Personalization → Taskbar → Widgets*) and keep taskbar icons centered: the strip lives in that left corner.
+On Windows 11 with centered icons, turn off the Windows Widgets button (*Settings → Personalization → Taskbar → Widgets*) to free the left corner, where the strip lives. On Windows 10, and on Windows 11 with left-aligned icons, the strip sits next to the system tray and follows it as tray icons come and go. On any Windows you can force that spot with `"placement": "right"` in `%APPDATA%\claude-codex-taskbar\config.json` (`auto` is the default; `left` and `right` are the other values). If there is no room next to the tray, the strip stays hidden, Windows shows one notification and Settings opens. When space runs out, hardware items are dropped first (disks, GPU, RAM, CPU), then usage limits from the end; labels always stay and a "…" marks where items were dropped. The tooltip lists what is hidden.
 
 Releases are not code-signed yet, so SmartScreen may warn: **More info → Run anyway**. Verify the file against `SHA256SUMS.txt` or its signed build provenance:
 
@@ -116,7 +116,6 @@ Build from source: `cargo build --release` (see [CONTRIBUTING.md](CONTRIBUTING.m
 
 - **Codex account switcher**, with the same rules: paid plans, manual only, encrypted locally.
 - Active account name in the tooltip, for Claude and Codex.
-- Windows 10 placement next to the system tray ([#10](https://github.com/chiarorosa/claude-codex-taskbar/issues/10)).
 - **macOS** menu-bar version: coming soon.
 - **Linux**: not yet.
 
@@ -148,7 +147,7 @@ Under 16 MB of memory and near-zero CPU, with no disk or network activity betwee
 ![Task Manager row for claude-codex-taskbar: 0% CPU, 14.5 MB memory](docs/screenshot-pc-usage.png)
 
 ### Does it work on macOS, Linux or Windows 10?
-CCT started on Windows 11, where no tool like it existed. A macOS version is coming soon; Linux is not supported yet. On Windows 10 it runs, but the strip stays hidden for now ([#10](https://github.com/chiarorosa/claude-codex-taskbar/issues/10)).
+CCT started on Windows 11, where no tool like it existed. A macOS version is coming soon; Linux is not supported yet. On Windows 10 the strip sits next to the system tray ([#10](https://github.com/chiarorosa/claude-codex-taskbar/issues/10)).
 
 ## Disclaimer
 
