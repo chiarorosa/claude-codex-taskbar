@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-11-13
+
 ### Added
 - **Strip position selector, with fallback (Windows 10 and 11).** Settings → General has a new
   *Strip position* choice, *Left* (default) or *Right*, applied at once. Left uses the left
@@ -40,6 +42,14 @@ All notable changes to this project are documented here. The format follows
   the next try is ("rate limited, next try 14:32"). Recent numbers stay on screen as before.
   A success or a Claude account switch starts over, and a Codex 429 no longer starts
   `codex app-server` (#87).
+- **Clearer message when the Claude Code CLI login is missing.** It used to say "Log in by
+  running `claude`", which misled people signed in only through the Claude desktop app. The
+  tooltip now says the CLI login was not found, that desktop-app logins aren't supported, and
+  that running `claude` once fixes it (#45).
+- **No false placement notice after one failed read.** When Windows failed once to report where
+  the taskbar app buttons end, CCT waited about 20 s before reading again, long enough to warn
+  that the strip had moved. A single failure is now retried on the next tick; the back-off
+  starts only after two in a row (#10).
 
 ### Changed
 - **Hardware items are dropped first when space runs out.** The order is disks, GPU, RAM, CPU,
@@ -248,7 +258,8 @@ All notable changes to this project are documented here. The format follows
   5-hour/weekly limits, tooltip with reset times, settings window, start with Windows,
   English and Brazilian Portuguese UI.
 
-[Unreleased]: https://github.com/chiarorosa/claude-codex-taskbar/compare/v0.4.3...HEAD
+[Unreleased]: https://github.com/chiarorosa/claude-codex-taskbar/compare/v0.4.4...HEAD
+[0.4.4]: https://github.com/chiarorosa/claude-codex-taskbar/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/chiarorosa/claude-codex-taskbar/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/chiarorosa/claude-codex-taskbar/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/chiarorosa/claude-codex-taskbar/compare/v0.4.0...v0.4.1
