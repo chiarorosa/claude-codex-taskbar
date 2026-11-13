@@ -5,7 +5,7 @@ use crate::hw::HwSnapshot;
 use crate::i18n::{Key, Lang, fmt, fmt2, t};
 use crate::limits::{
     FIVE_HOUR_SECS, FetchError, ModelKind, ProviderStatus, ProviderUsage, WEEK_SECS, WindowUsage,
-    elapsed_fraction,
+    elapsed_fraction, pace_ratio, projected_exhaustion,
 };
 use crate::model::{ItemId, Kind};
 use crate::timeutil::{format_local_day_hhmm, format_local_hhmm};
@@ -282,6 +282,7 @@ fn window_line(
     weekly: bool,
     now: i64,
     remaining: bool,
+    live: bool,
 ) {
     let Some(w) = w else { return };
     let _ = write!(
@@ -302,6 +303,33 @@ fn window_line(
         if let Some(countdown) = reset_countdown(lang, reset, now) {
             let _ = write!(out, " ({countdown})");
         }
+        if live {
+            let window_len = if weekly { WEEK_SECS } else { FIVE_HOUR_SECS };
+            if let Some(ratio) = pace_ratio(Some(reset), window_len, w.used_pct, now) {
+                let _ = write!(
+                    out,
+                    " · {}",
+                    fmt(t(lang, Key::PaceFmt), &fmt_round((ratio * 100.0) as f32))
+                );
+            }
+            if let Some(exhaustion) = projected_exhaustion(
+                Some(reset),
+                window_len,
+                w.used_pct,
+                now,
+            ) {
+                let projected_when = if weekly {
+                    format_local_day_hhmm(exhaustion)
+                } else {
+                    format_local_hhmm(exhaustion)
+                };
+                let _ = write!(
+                    out,
+                    " · {}",
+                    fmt(t(lang, Key::ProjectedExhaustionFmt), &projected_when)
+                );
+            }
+        }
     }
 }
 
@@ -311,13 +339,14 @@ fn model_usage_lines(
     usage: &ProviderUsage,
     now: i64,
     remaining: bool,
+    live: bool,
 ) {
     for (model, window) in &usage.weekly_by_model {
         let key = match model {
             ModelKind::Opus => Key::LabelOpusWeek,
             ModelKind::Sonnet => Key::LabelSonnetWeek,
         };
-        window_line(out, lang, t(lang, key), Some(window), true, now, remaining);
+        window_line(out, lang, t(lang, key), Some(window), true, now, remaining, live);
     }
     if usage.extra_usage_enabled {
         let _ = write!(out, "\n  {}", t(lang, Key::ExtraUsageEnabled));
@@ -334,10 +363,11 @@ fn provider_block(
     remaining: bool,
 ) {
     let week = t(lang, Key::LabelWeek);
+    let live = matches!(status, ProviderStatus::Ok { .. });
     let usage_lines = |out: &mut String, u: &ProviderUsage| {
-        window_line(out, lang, "5h", u.five_hour.as_ref(), false, now, remaining);
-        window_line(out, lang, week, u.weekly.as_ref(), true, now, remaining);
-        model_usage_lines(out, lang, u, now, remaining);
+        window_line(out, lang, "5h", u.five_hour.as_ref(), false, now, remaining, live);
+        window_line(out, lang, week, u.weekly.as_ref(), true, now, remaining, live);
+        model_usage_lines(out, lang, u, now, remaining, live);
     };
     if !out.is_empty() {
         out.push_str("\n\n");
@@ -537,6 +567,7 @@ mod tests {
                     ..Config::default()
                 };
                 let items = build_items(&cfg, &hw(), &ok(62.0, 100.0), &ok(0.0, 62.0), "", lang, 0);
+
                 assert_eq!(items[0].text(), "23%");
                 assert_eq!(items[4].value, Some(62.0));
                 assert_eq!(items[4].text(), if remaining { "38%" } else { "62%" });
@@ -560,6 +591,74 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn live_tooltip_shows_pace_and_projected_exhaustion() {
+        const NOW: i64 = 1_800_000_000;
+        let reset = NOW + FIVE_HOUR_SECS;
+        let now = NOW + FIVE_HOUR_SECS * 3 / 10;
+        let status = ProviderStatus::Ok {
+            usage: ProviderUsage {
+                five_hour: Some(WindowUsage {
+                    used_pct: 60.0,
+                    resets_at: Some(reset),
+                }),
+                ..Default::default()
+            },
+            at: now,
+        };
+        let tip = tooltip_text(
+            Lang::En,
+            &status,
+            &ProviderStatus::Disabled,
+            &[],
+            TaskbarHints::default(),
+            now,
+            false,
+        );
+        assert!(tip.contains("pace: 200%"), "{tip}");
+        assert!(
+            tip.contains(&format!(
+                "at this pace: ~100% at {}",
+                format_local_hhmm(NOW + FIVE_HOUR_SECS / 2)
+            )),
+            "{tip}"
+        );
+    }
+
+    #[test]
+    fn slow_and_stale_tooltips_do_not_show_exhaustion_projection() {
+        const NOW: i64 = 1_800_000_000;
+        let reset = NOW + FIVE_HOUR_SECS;
+        let now = NOW + FIVE_HOUR_SECS * 3 / 10;
+        let usage = ProviderUsage {
+            five_hour: Some(WindowUsage {
+                used_pct: 60.0,
+                resets_at: Some(reset),
+            }),
+            ..Default::default()
+        };
+        let stale = ProviderStatus::Stale {
+            usage: usage.clone(),
+            at: now,
+            err: FetchError::Network(String::new()),
+        };
+        let from_session = ProviderStatus::FromSession { usage, at: now };
+        for status in [&stale, &from_session] {
+            let tip = tooltip_text(
+                Lang::En,
+                status,
+                &ProviderStatus::Disabled,
+                &[],
+                TaskbarHints::default(),
+                now,
+                false,
+            );
+            assert!(!tip.contains("pace:"), "{tip}");
+            assert!(!tip.contains("~100%"), "{tip}");
+        }
+    }
+
     use crate::config::Config;
     use crate::hw::{DiskReading, HwSnapshot};
     use crate::i18n::Lang;
