@@ -28,7 +28,27 @@ pub fn lang_from_langid(langid: u16) -> Lang {
     }
 }
 
+/// The language named by the `CCT_LANG` environment variable (`en`, `pt`/`pt-BR`, `es`,
+/// any region suffix), used to check translations and take screenshots without changing the
+/// Windows display language. `None` for anything else.
+pub fn lang_from_override(value: &str) -> Option<Lang> {
+    let value = value.trim().to_ascii_lowercase();
+    match value.split(['-', '_']).next()? {
+        "en" => Some(Lang::En),
+        "pt" => Some(Lang::PtBr),
+        "es" => Some(Lang::Es),
+        _ => None,
+    }
+}
+
+/// `CCT_LANG` when it names a supported language, otherwise the Windows display language.
 pub fn detect_lang() -> Lang {
+    if let Some(lang) = std::env::var("CCT_LANG")
+        .ok()
+        .and_then(|v| lang_from_override(&v))
+    {
+        return lang;
+    }
     // SAFETY: no arguments, no preconditions.
     let langid = unsafe { windows::Win32::Globalization::GetUserDefaultUILanguage() };
     lang_from_langid(langid)
@@ -660,6 +680,18 @@ mod tests {
         }
         assert_eq!(lang_from_langid(0x0416), Lang::PtBr);
         assert_eq!(lang_from_langid(0x040c), Lang::En); // fr-FR falls back to English
+    }
+
+    #[test]
+    fn cct_lang_override_accepts_language_tags() {
+        assert_eq!(lang_from_override("en"), Some(Lang::En));
+        assert_eq!(lang_from_override("EN-us"), Some(Lang::En));
+        assert_eq!(lang_from_override("pt-BR"), Some(Lang::PtBr));
+        assert_eq!(lang_from_override("pt"), Some(Lang::PtBr));
+        assert_eq!(lang_from_override(" es-MX "), Some(Lang::Es));
+        // Unknown or empty values fall back to the Windows language.
+        assert_eq!(lang_from_override("de"), None);
+        assert_eq!(lang_from_override(""), None);
     }
 
     #[test]
