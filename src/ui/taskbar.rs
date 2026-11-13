@@ -160,8 +160,10 @@ impl IconCache {
 /// Caches the right edge of the app buttons for the right placement (#10). Even warm, the
 /// UI Automation read costs about 2.7 ms, so a successful read is reused for
 /// [`ICON_PERIOD_TICKS`] ticks or until invalidated (apps open and close). A failed read is
-/// never kept as a guess: the value is dropped (the strip stays hidden) and reads back off
-/// like the icons' ([`IconCache`]), ignoring the cheap dirty mark until one succeeds.
+/// never kept as a guess: the value is dropped (the strip stays hidden). A single failure is
+/// retried on the next tick, so a one-off miss does not outlast the placement watch's
+/// `SETTLE_SECS` and raise a spurious notice; from the second failure in a row reads back
+/// off like the icons' ([`IconCache`]), ignoring the cheap dirty mark until one succeeds.
 #[derive(Debug, Default)]
 pub struct AppsEdgeCache {
     last: Option<i32>,
@@ -171,9 +173,20 @@ pub struct AppsEdgeCache {
     tried: bool,
 }
 
+/// Ticks between app-edge reads after `failures` failed ones in a row: one tick after a
+/// single failure, then the icons' back-off (10, 20, then 30).
+fn apps_edge_wait(failures: u32) -> u32 {
+    match failures {
+        1 => 1,
+        n => backoff(n.saturating_sub(1)),
+    }
+}
+
 impl AppsEdgeCache {
     pub fn needs_lookup(&self) -> bool {
-        !self.tried || (self.dirty && self.failures == 0) || self.ticks >= backoff(self.failures)
+        !self.tried
+            || (self.dirty && self.failures < 2)
+            || self.ticks >= apps_edge_wait(self.failures)
     }
 
     pub fn on_lookup(&mut self, result: Option<i32>) {
@@ -620,7 +633,8 @@ mod tests {
             assert_eq!(c.value(), None);
             waits.push(ticks_to_lookup(&mut c));
         }
-        assert_eq!(waits, [10, 20, 30, 30, 30]);
+        // One failure retries on the next tick; the back-off starts at the second.
+        assert_eq!(waits, [1, 10, 20, 30, 30]);
         // A success ends the back-off.
         c.on_lookup(Some(1159));
         assert_eq!(c.value(), Some(1159));
@@ -628,17 +642,38 @@ mod tests {
     }
 
     #[test]
+    fn apps_edge_single_failure_is_retried_without_back_off() {
+        // A one-off failed read (#10) must not hide the strip for longer than SETTLE_SECS,
+        // or it raises a spurious placement notice.
+        let mut c = AppsEdgeCache::default();
+        c.on_lookup(Some(1159));
+        c.tick();
+        c.invalidate();
+        c.on_lookup(None);
+        assert_eq!(ticks_to_lookup(&mut c), 1);
+        c.on_lookup(Some(1160));
+        assert_eq!(c.value(), Some(1160));
+        // The next failure is again a first one.
+        c.on_lookup(None);
+        assert_eq!(ticks_to_lookup(&mut c), 1);
+    }
+
+    #[test]
     fn apps_edge_dirty_mark_waits_out_the_back_off_but_reset_does_not() {
         let mut c = AppsEdgeCache::default();
         c.on_lookup(None);
-        // Foreground changes do not retry a failing read on every switch.
+        // After a single failure the dirty mark still asks for a read.
+        c.invalidate();
+        assert!(c.needs_lookup());
+        c.on_lookup(None);
+        // Reads are failing: foreground changes do not retry on every switch.
         c.invalidate();
         assert!(!c.needs_lookup());
         // Explorer, display or settings changed: read right away and drop the back-off.
         c.reset();
         assert!(c.needs_lookup());
         c.on_lookup(None);
-        assert_eq!(ticks_to_lookup(&mut c), 10);
+        assert_eq!(ticks_to_lookup(&mut c), 1);
     }
 
     #[test]
