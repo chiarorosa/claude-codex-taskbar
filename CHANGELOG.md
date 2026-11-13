@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.5] - 2026-11-13
+
+### Fixed
+- **Windows 10: the strip fits next to News and interests.** With News and interests on the
+  taskbar (for example a stock ticker beside the tray), CCT counted it as part of the app
+  buttons and said there was no room on the right. The strip now sits in the free space
+  between the last app button and the widget. Without the widget nothing changes (#10).
+
 ## [0.4.4] - 2026-11-13
 
 ### Added
@@ -258,7 +266,8 @@ All notable changes to this project are documented here. The format follows
   5-hour/weekly limits, tooltip with reset times, settings window, start with Windows,
   English and Brazilian Portuguese UI.
 
-[Unreleased]: https://github.com/chiarorosa/claude-codex-taskbar/compare/v0.4.4...HEAD
+[Unreleased]: https://github.com/chiarorosa/claude-codex-taskbar/compare/v0.4.5...HEAD
+[0.4.5]: https://github.com/chiarorosa/claude-codex-taskbar/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/chiarorosa/claude-codex-taskbar/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/chiarorosa/claude-codex-taskbar/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/chiarorosa/claude-codex-taskbar/compare/v0.4.1...v0.4.2
