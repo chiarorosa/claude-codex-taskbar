@@ -469,7 +469,7 @@ pub fn query(with_icons: bool, with_apps: bool, with_edges: bool) -> Option<Task
             with_apps
                 .then(|| edges::apps_right(hwnd, rect, windows_10))
                 .flatten(),
-            edges::tray_left(hwnd, rect),
+            edges::tray_left(hwnd, rect, windows_10),
         )
     } else {
         (None, None)

@@ -22,10 +22,12 @@
 //! - Tray: the same `TrayNotifyWnd` child window (notification icons, clock, action center).
 //! - Apps: `Shell_TrayWnd` → `ReBarWindow32` → `MSTaskSwWClass` → `MSTaskListWClass`, whose UI
 //!   Automation children are the app buttons. `MSTaskSwWClass` itself spans its whole band up
-//!   to the tray, so it is skipped; every other visible `ReBarWindow32` child (toolbars,
+//!   to the tray, so it is skipped. Every other visible `ReBarWindow32` child (toolbars,
 //!   deskbands) and every other visible `Shell_TrayWnd` child at or right of the rebar (e.g.
-//!   News and interests) counts as occupied. With no buttons the apps end at the rebar's left
-//!   edge (Start, search and Task view sit left of it).
+//!   News and interests) is occupied: one left of the task list extends the apps, one at or
+//!   right of it joins the tray group, so the free gap ends at its left edge (a News and
+//!   interests ticker beside the tray leaves the gap between the apps and the ticker). With no
+//!   buttons the apps end at the rebar's left edge (Start, search and Task view sit left of it).
 
 use super::{Rect, needs_full_find};
 use windows::Win32::Foundation::{HWND, RECT};
@@ -91,13 +93,39 @@ fn visible_children(parent: HWND) -> Vec<(String, Rect)> {
     out
 }
 
-/// Left edge of the system tray (`TrayNotifyWnd`, see the module notes for each OS).
-pub(super) fn tray_left(taskbar: HWND, bar: Rect) -> Option<i32> {
+/// Windows 10 bands split around the task list band: those left of it (they extend the
+/// apps) and the leftmost edge of those at or right of it (they join the tray group).
+/// Empty bands are ignored.
+pub(super) fn split_bands(task_band: Rect, bands: &[Rect]) -> (Vec<Rect>, Option<i32>) {
+    let (right, left): (Vec<Rect>, Vec<Rect>) = bands
+        .iter()
+        .copied()
+        .filter(|b| b.width() > 0)
+        .partition(|b| b.left >= task_band.left);
+    (left, right.iter().map(|b| b.left).min())
+}
+
+/// Left edge of the right group: the tray, or a band beside it that starts further left.
+/// Unknown without the tray.
+pub(super) fn right_group_left(tray: Option<i32>, bands_left: Option<i32>) -> Option<i32> {
+    let tray = tray?;
+    Some(bands_left.map_or(tray, |b| b.min(tray)))
+}
+
+/// Left edge of the right group (see the module notes for each OS): the system tray
+/// (`TrayNotifyWnd`) and, on Windows 10, any band right of the task list.
+pub(super) fn tray_left(taskbar: HWND, bar: Rect, windows_10: bool) -> Option<i32> {
     let r = window_rect(child(taskbar, w!("TrayNotifyWnd"))?)?;
     if r.width() <= 0 {
         return None;
     }
-    within(bar, r.left)
+    let bands_left = if windows_10 {
+        let (_, task_band, bands) = windows10_bands(taskbar)?;
+        split_bands(task_band, &bands).1
+    } else {
+        None
+    };
+    within(bar, right_group_left(Some(r.left), bands_left)?)
 }
 
 /// UI Automation objects kept between lookups, like the Start button's (#86): the client,
@@ -219,11 +247,12 @@ pub fn invalidate_edges() {
     }
 }
 
-/// Windows 10 bands that are not the task list but still occupy the taskbar between the
-/// apps and the tray (see the module notes).
-fn windows10_bands(taskbar: HWND) -> Option<(Rect, Vec<Rect>)> {
+/// Windows 10 bands that are not the task list but still occupy the taskbar, with the
+/// rebar's and the task list band's rectangles (see the module notes).
+fn windows10_bands(taskbar: HWND) -> Option<(Rect, Rect, Vec<Rect>)> {
     let rebar = child(taskbar, w!("ReBarWindow32"))?;
     let rebar_rect = window_rect(rebar)?;
+    let task_band = window_rect(child(rebar, w!("MSTaskSwWClass"))?)?;
     let mut bands: Vec<Rect> = visible_children(rebar)
         .into_iter()
         .filter(|(class, _)| class != "MSTaskSwWClass")
@@ -237,15 +266,15 @@ fn windows10_bands(taskbar: HWND) -> Option<(Rect, Vec<Rect>)> {
             })
             .map(|(_, r)| r),
     );
-    Some((rebar_rect, bands))
+    Some((rebar_rect, task_band, bands))
 }
 
 /// Right edge of the taskbar icons (see the module notes for each OS).
 pub(super) fn apps_right(taskbar: HWND, bar: Rect, windows_10: bool) -> Option<i32> {
     let mut rects = app_rects(taskbar, windows_10)?;
     let left_group_right = if windows_10 {
-        let (rebar, bands) = windows10_bands(taskbar)?;
-        rects.extend(bands);
+        let (rebar, task_band, bands) = windows10_bands(taskbar)?;
+        rects.extend(split_bands(task_band, &bands).0);
         Some(rebar.left)
     } else {
         None
@@ -281,6 +310,32 @@ mod tests {
         assert_eq!(apps_right_of(&rects, None), Some(895));
         assert_eq!(apps_right_of(&[r(0, 0)], Some(800)), Some(800));
         assert_eq!(apps_right_of(&[r(0, 0)], None), None);
+    }
+
+    #[test]
+    fn windows10_bands_right_of_the_task_list_join_the_tray_group() {
+        // News and interests (the TSLA34 ticker) sits right of the task list, beside the
+        // tray: it bounds the free gap on the right instead of pushing the apps' edge there.
+        let task_band = r(300, 1400);
+        let news = r(1400, 1560);
+        let links = r(200, 300);
+        let (left, right_left) = split_bands(task_band, &[news, links]);
+        assert_eq!(left, [links]);
+        assert_eq!(right_left, Some(1400));
+        // Several bands on the right: the leftmost bounds the gap; empty ones are ignored.
+        let (left, right_left) = split_bands(task_band, &[r(1500, 1560), r(1420, 1480), r(0, 0)]);
+        assert!(left.is_empty());
+        assert_eq!(right_left, Some(1420));
+        assert_eq!(split_bands(task_band, &[]), (vec![], None));
+    }
+
+    #[test]
+    fn right_group_left_is_the_nearest_of_tray_and_bands() {
+        assert_eq!(right_group_left(Some(1600), Some(1400)), Some(1400));
+        assert_eq!(right_group_left(Some(1600), Some(1700)), Some(1600));
+        assert_eq!(right_group_left(Some(1600), None), Some(1600));
+        // Without the tray the right group is unknown.
+        assert_eq!(right_group_left(None, Some(1400)), None);
     }
 
     #[test]
